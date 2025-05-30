@@ -1,5 +1,5 @@
+from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field
-from typing import List, Optional
 from datetime import datetime
 from bson import ObjectId
 
@@ -9,61 +9,79 @@ class PyObjectId(ObjectId):
         yield cls.validate
 
     @classmethod
-    def validate(cls, v):
+    def validate(cls, v, handler):
         if not ObjectId.is_valid(v):
             raise ValueError("Invalid objectid")
         return ObjectId(v)
 
     @classmethod
-    def __modify_schema__(cls, field_schema):
+    def __get_pydantic_json_schema__(cls, field_schema):
         field_schema.update(type="string")
 
-class Location(BaseModel):
+class StationLocation(BaseModel):
     type: str = "Point"
     coordinates: List[float]  # [longitude, latitude]
 
-class Address(BaseModel):
-    street: str
-    city: str
-    postal_code: Optional[str] = None
-    country: str
+class ConnectorInfo(BaseModel):
+    id: Optional[str] = None
+    type: str = "Type2"
+    max_power_kw: float = 22.0
+    current_type: str = "AC"
+    status: str = "AVAILABLE"
 
-class Connector(BaseModel):
-    id: str
-    type: str  # CCS, CHAdeMO, Type2, Type1, Tesla
-    power_kw: Optional[float] = None
-    status: str  # AVAILABLE, OCCUPIED, OUT_OF_ORDER
-
-class Operator(BaseModel):
-    name: Optional[str] = None
+class OperatorInfo(BaseModel):
+    name: str
+    website: Optional[str] = None
     phone: Optional[str] = None
 
-class Pricing(BaseModel):
-    currency: Optional[str] = "EUR"
+class PricingInfo(BaseModel):
+    currency: str = "EUR"
     price_per_kwh: Optional[float] = None
+    price_per_minute: Optional[float] = None
     connection_fee: Optional[float] = None
-
-class OpeningHours(BaseModel):
-    is_24_7: Optional[bool] = True
-    schedule: Optional[str] = None
 
 class Station(BaseModel):
     id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
-    tomtom_id: str
+    tomtom_id: str = Field(..., unique=True)
     name: str
-    location: Location
-    address: Address
-    status: str  # AVAILABLE, OCCUPIED, OFFLINE, MAINTENANCE
-    connectors: List[Connector]
-    operator: Optional[Operator] = None
-    pricing: Optional[Pricing] = None
-    amenities: Optional[List[str]] = []
-    opening_hours: Optional[OpeningHours] = None
+    location: StationLocation
+    address: str
+    connectors: List[ConnectorInfo]
+    operator: OperatorInfo
+    pricing: Optional[PricingInfo] = None
+    status: str = "AVAILABLE"  # "AVAILABLE", "BUSY", "OUT_OF_ORDER", "UNKNOWN"
+    access_type: str = "PUBLIC"  # "PUBLIC", "PRIVATE", "RESTRICTED"
+    opening_hours: Optional[str] = None
+    amenities: List[str] = []  # ["parking", "restaurant", "wifi", etc.]
     last_updated: datetime = Field(default_factory=datetime.utcnow)
-    data_source: Optional[str] = "tomtom_api"
     created_at: datetime = Field(default_factory=datetime.utcnow)
     
     class Config:
-        allow_population_by_field_name = True
+        populate_by_name = True
         arbitrary_types_allowed = True
         json_encoders = {ObjectId: str}
+        json_schema_extra = {
+            "example": {
+                "tomtom_id": "12345",
+                "name": "EV Station Downtown",
+                "location": {
+                    "type": "Point",
+                    "coordinates": [23.7275, 37.9755]
+                },
+                "address": "123 Main St, Athens, Greece",
+                "connectors": [
+                    {
+                        "type": "Type2",
+                        "max_power_kw": 22.0,
+                        "current_type": "AC",
+                        "status": "AVAILABLE"
+                    }
+                ],
+                "operator": {
+                    "name": "EV Network",
+                    "website": "https://evnetwork.com",
+                    "phone": "+30210123456"
+                },
+                "status": "AVAILABLE"
+            }
+        }

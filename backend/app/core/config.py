@@ -1,28 +1,44 @@
 from pydantic_settings import BaseSettings
 from typing import List
+import os
 
 class Settings(BaseSettings):
-    # Database
-    MONGODB_URL: str = "mongodb://localhost:27017"
-    DATABASE_NAME: str = "ev_charging_db"
+    # Database settings
+    mongodb_url: str = "mongodb://localhost:27017"
+    database_name: str = "ev_charging_db"
     
-    # TomTom API
-    TOMTOM_API_KEY: str = "f4ox7ygPosfpB1r6UbOMeVjq662iK9W6"
-    TOMTOM_BASE_URL: str = "https://api.tomtom.com"
+    # TomTom API Keys
+    tomtom_api_key: str = ""
+    tomtom_ev_api_key: str = ""  # Νέο πεδίο
     
-    # JWT
-    SECRET_KEY: str = "your-secret-key-change-this-in-production"
-    ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    # CORS settings
+    cors_origins: List[str] = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:8080",
+        "http://127.0.0.1:8080"
+    ]
     
-    # CORS
-    ALLOWED_ORIGINS: str = "http://localhost:3000"
+    # JWT settings
+    secret_key: str = "your-secret-key-here-change-in-production"
+    algorithm: str = "HS256"
+    access_token_expire_minutes: int = 30
     
-    @property
-    def cors_origins(self) -> List[str]:
-        return [origin.strip() for origin in self.ALLOWED_ORIGINS.split(",")]
+    # Email settings (for notifications)
+    smtp_server: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    
+    # Redis settings (for caching)
+    redis_url: str = "redis://localhost:6379"
+    
+    # App settings
+    app_name: str = "EV Charging Stations API"
+    debug: bool = True
     
     class Config:
         env_file = ".env"
+        case_sensitive = False
 
 settings = Settings()
