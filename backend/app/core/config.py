@@ -4,44 +4,40 @@ import os
 
 class Settings(BaseSettings):
     # Database settings
-    mongodb_url: str = "mongodb://localhost:27017"
-    database_name: str = "ev_charging_db"
+    mongodb_url: str
+    database_name: str
     
     # TomTom API Keys
-    tomtom_api_key: str = ""
-    tomtom_ev_api_key: str = ""  # Νέο πεδίο
+    tomtom_api_key: str
+    tomtom_ev_api_key: Optional[str] = None
+    tomtom_base_url: str = "https://api.tomtom.com"
     
     # CORS settings
-    cors_origins: List[str] = [
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:8080",
-        "http://127.0.0.1:8080"
-    ]
+    cors_origins: List[str] = []
     
     # JWT settings
-    secret_key: str = "your-secret-key-here-change-in-production"
+    secret_key: str
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     
     # Email settings (for notifications)
-    smtp_server: str = ""
-    smtp_port: int = 587
-    smtp_username: str = ""
-    smtp_password: str = ""
+    smtp_server: Optional[str] = None
+    smtp_port: Optional[int] = 587
+    smtp_username: Optional[str] = None
+    smtp_password: Optional[str] = None
     
-    # Redis settings (for caching)
-    redis_url: str = "redis://localhost:6379/0"
+    # Redis settings (for caching or other purposes)
+    redis_url: str
     
     # App settings
     app_name: str = "EV Charging Stations API"
     debug: bool = True
     
     # Celery settings
-    celery_broker_url: str = "redis://localhost:6379/0"
-    celery_result_backend: str = "redis://localhost:6379/0"
+    celery_broker_url: str
+    celery_result_backend: str
     
-    # Realtime Layer
+    # Realtime Layer (Pusher)
     pusher_app_id: Optional[str] = None
     pusher_key: Optional[str] = None
     pusher_secret: Optional[str] = None
@@ -49,14 +45,23 @@ class Settings(BaseSettings):
     
     class Config:
         env_file = ".env"
-        case_sensitive = False
         env_file_encoding = 'utf-8'
         extra = 'ignore'
 
 settings = Settings()
 
-# Προαιρετικό: Ένα log για να επιβεβαιώσεις ότι φορτώθηκαν οι ρυθμίσεις του Celery
+# Logging για επιβεβαίωση
 import logging
 logger = logging.getLogger(__name__)
+
+if settings.tomtom_ev_api_key:
+    logger.info("TomTom EV API key configured.")
+else:
+    # Αν το tomtom_ev_api_key είναι Optional και η απουσία του δεν είναι πρόβλημα,
+    # ίσως δεν χρειάζεται warning, αλλά ένα info ή debug log.
+    logger.info("TomTom EV API key not configured (optional).")
+
 logger.info(f"Loaded Celery Broker URL: {settings.celery_broker_url}")
 logger.info(f"Loaded Celery Result Backend: {settings.celery_result_backend}")
+logger.info(f"CORS Origins: {settings.cors_origins}")
+logger.info(f"Debug mode: {settings.debug}")
