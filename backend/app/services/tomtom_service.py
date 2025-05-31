@@ -23,6 +23,7 @@ class TomTomService:
         self.search_base_url = "https://api.tomtom.com/search/2/search"
         self.ev_base_url = "https://api.tomtom.com/search/2/chargingAvailability"
         self.client = httpx.AsyncClient(timeout=30.0)
+        self.sync_client = httpx.Client(timeout=30.0)  # Προσθήκη σύγχρονου client
         
         if not self.search_api_key or self.search_api_key == "demo_key":
             logger.warning("TomTom Search API key not configured.")
@@ -32,6 +33,7 @@ class TomTomService:
     async def close(self):
         """Close the HTTP client"""
         await self.client.aclose()
+        self.sync_client.close()  # Κλείσιμο του σύγχρονου client
     
     async def search_charging_stations(
         self, 
@@ -39,7 +41,7 @@ class TomTomService:
         longitude: float, 
         radius: int = 50000
     ) -> List[Station]:
-        """Search for charging stations using TomTom Search API"""
+        """Search for charging stations using TomTom Search API (async)"""
         try:
             print(f"🔍 DEBUGGING: API Key = {self.search_api_key}")
             print(f"🔍 DEBUGGING: Search URL = {self.search_base_url}")
@@ -62,6 +64,71 @@ class TomTomService:
             logger.info(f"API Key: {self.search_api_key}")
             
             response = await self.client.get(
+                f"{self.search_base_url}/electric%20vehicle%20charging%20station.json", 
+                params=params
+            )
+            
+            logger.info(f"Response Status: {response.status_code}")
+            logger.info(f"Response Headers: {dict(response.headers)}")
+            
+            response.raise_for_status()
+            data = response.json()
+            
+            logger.info(f"Response Data Keys: {list(data.keys())}")
+            logger.info(f"Results Count: {len(data.get('results', []))}")
+            
+            if data.get('results'):
+                logger.info(f"First Result: {data['results'][0]}")
+            
+            stations = []
+            for result in data.get("results", []):
+                try:
+                    station = self._parse_tomtom_station(result)
+                    stations.append(station)
+                except Exception as e:
+                    logger.warning(f"Failed to parse station: {e}")
+                    continue
+            
+            logger.info(f"Successfully parsed {len(stations)} charging stations")
+            return stations
+            
+        except httpx.HTTPStatusError as e:
+            logger.error(f"TomTom API HTTP error: {e}")
+            logger.error(f"Response content: {e.response.text}")
+            raise TomTomAPIException(f"TomTom API error: {e.response.status_code}")
+        except Exception as e:
+            logger.error(f"Error searching charging stations: {e}")
+            raise TomTomAPIException(f"Failed to search charging stations: {str(e)}")
+    
+    def search_charging_stations_sync(
+        self, 
+        latitude: float, 
+        longitude: float, 
+        radius: int = 50000
+    ) -> List[Station]:
+        """Search for charging stations using TomTom Search API (synchronous)"""
+        try:
+            print(f"🔍 DEBUGGING: API Key = {self.search_api_key}")
+            print(f"🔍 DEBUGGING: Search URL = {self.search_base_url}")
+            print(f"🔍 DEBUGGING: Coordinates = ({latitude}, {longitude})")
+            print(f"🔍 DEBUGGING: Radius = {radius}")
+            
+            # ΑΚΡΙΒΩΣ όπως στο Node-RED
+            params = {
+                "key": self.search_api_key,
+                "limit": 100,
+                "lat": latitude,
+                "lon": longitude,
+                "radius": radius,
+                "categorySet": "7309"
+            }
+            
+            logger.info(f"TomTom API Request:")
+            logger.info(f"URL: {self.search_base_url}/electric%20vehicle%20charging%20station.json")
+            logger.info(f"Params: {params}")
+            logger.info(f"API Key: {self.search_api_key}")
+            
+            response = self.sync_client.get(
                 f"{self.search_base_url}/electric%20vehicle%20charging%20station.json", 
                 params=params
             )

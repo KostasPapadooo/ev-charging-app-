@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings
-from typing import List
+from typing import List, Optional
 import os
 
 class Settings(BaseSettings):
@@ -31,14 +31,32 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     
     # Redis settings (for caching)
-    redis_url: str = "redis://localhost:6379"
+    redis_url: str = "redis://localhost:6379/0"
     
     # App settings
     app_name: str = "EV Charging Stations API"
     debug: bool = True
     
+    # Celery settings
+    celery_broker_url: str = "redis://localhost:6379/0"
+    celery_result_backend: str = "redis://localhost:6379/0"
+    
+    # Realtime Layer
+    pusher_app_id: Optional[str] = None
+    pusher_key: Optional[str] = None
+    pusher_secret: Optional[str] = None
+    pusher_cluster: Optional[str] = None
+    
     class Config:
         env_file = ".env"
         case_sensitive = False
+        env_file_encoding = 'utf-8'
+        extra = 'ignore'
 
 settings = Settings()
+
+# Προαιρετικό: Ένα log για να επιβεβαιώσεις ότι φορτώθηκαν οι ρυθμίσεις του Celery
+import logging
+logger = logging.getLogger(__name__)
+logger.info(f"Loaded Celery Broker URL: {settings.celery_broker_url}")
+logger.info(f"Loaded Celery Result Backend: {settings.celery_result_backend}")

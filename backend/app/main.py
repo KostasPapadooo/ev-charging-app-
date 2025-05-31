@@ -38,6 +38,9 @@ app.add_middleware(
 async def startup_event():
     """Initialize database connection on startup"""
     await connect_to_mongo()
+    # Αρχικοποίηση των repositories μετά τη σύνδεση στη βάση δεδομένων
+    from app.repositories import init_repositories
+    init_repositories()
     logger.info("Application startup complete")
 
 @app.on_event("shutdown")
@@ -296,6 +299,85 @@ async def test_station_operations():
         raise HTTPException(
             status_code=500,
             detail=f"Error in station operations test: {str(e)}"
+        )
+
+@app.get("/test/historical-save")
+async def test_historical_save():
+    from app.repositories import historical_repo
+    from app.models.station import Station, StationLocation, ConnectorInfo, OperatorInfo
+    from datetime import datetime
+    
+    test_station = Station(
+        tomtom_id="test_historical_123",
+        name="Test Historical Station",
+        location=StationLocation(
+            type="Point",
+            coordinates=[23.7348, 37.9755]
+        ),
+        address="Test Historical Address",
+        connectors=[ConnectorInfo(
+            type="Type2",
+            max_power_kw=22.0,
+            current_type="AC",
+            status="AVAILABLE"
+        )],
+        operator=OperatorInfo(
+            name="Test Operator",
+            website="https://example.com"
+        ),
+        status="AVAILABLE",
+        access_type="PUBLIC"
+    )
+    
+    # Προσθήκη των απαιτούμενων πεδίων για την ιστορική εγγραφή
+    historical_data = test_station.dict(by_alias=True)
+    historical_data['station_id'] = test_station.tomtom_id
+    historical_data['status_snapshot'] = {
+        "station_status": test_station.status,
+        "total_connectors": len(test_station.connectors),
+        "available_connectors": sum(1 for c in test_station.connectors if c.status == "AVAILABLE"),
+        "occupied_connectors": sum(1 for c in test_station.connectors if c.status == "OCCUPIED"),
+        "out_of_order_connectors": sum(1 for c in test_station.connectors if c.status == "OUT_OF_ORDER")
+    }
+    historical_data['timestamp'] = datetime.utcnow()
+    
+    if '_id' in historical_data:
+        del historical_data['_id']
+    
+    saved_id = await historical_repo.save_historical_data(historical_data)
+    return {
+        "success": True,
+        "message": "Historical data saved",
+        "saved_id": str(saved_id)
+    }
+
+@app.get("/batch/update-stations")
+async def trigger_batch_update_stations(
+    lat: float = 37.9755,  # Κέντρο Αθήνας
+    lon: float = 23.7348,
+    radius: int = 50000    # 50km εμβέλεια
+):
+    """Trigger batch update of stations data"""
+    try:
+        from app.tasks.batch_tasks import batch_update_stations
+        
+        logger.info(f"Triggering batch update for stations at ({lat}, {lon}) with radius {radius}m")
+        
+        # Trigger the Celery task asynchronously without await
+        task = batch_update_stations.apply_async(args=(lat, lon, radius))
+        
+        return {
+            "success": True,
+            "message": f"Batch update task triggered for stations at ({lat}, {lon})",
+            "task_id": task.id,
+            "location": {"latitude": lat, "longitude": lon, "radius": radius}
+        }
+        
+    except Exception as e:
+        logger.error(f"Error triggering batch update: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error triggering batch update: {str(e)}"
         )
 
 if __name__ == "__main__":

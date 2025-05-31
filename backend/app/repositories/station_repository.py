@@ -5,26 +5,32 @@ from app.repositories.base_repository import BaseRepository
 from app.models.station import Station, StationLocation
 from datetime import datetime
 import logging
-from app.database.connection import get_database
+from app.core.config import settings  # Προσθήκη για να πάρουμε τη MongoDB URL
 
 logger = logging.getLogger(__name__)
 
 class StationRepository(BaseRepository[Station]):
     def __init__(self):
         # Lazy initialization
-        self._collection = None
         self._model_class = Station
-        self.db = get_database()
-        self.collection = self.db["current_stations"]
+        # Δημιουργία σύνδεσης απευθείας, χωρίς χρήση get_database()
+        logger.info("Creating database connection for StationRepository")
+        try:
+            import motor.motor_asyncio
+            client = motor.motor_asyncio.AsyncIOMotorClient(settings.mongodb_url)
+            self.db = client[settings.database_name]
+        except Exception as e:
+            logger.error(f"Error creating database connection: {str(e)}")
+            raise
+        self._collection = self.db["current_stations"]
         # Δημιουργία geospatial index για location-based queries
-        self.collection.create_index([("location", GEOSPHERE)])
+        self._collection.create_index([("location", GEOSPHERE)])
+        # Προσθήκη σύγχρονου client για pymongo
+        self.sync_db = pymongo.MongoClient(settings.mongodb_url)  # Ρύθμιση με τη σωστή URL σύνδεσης
+        self.sync_collection = self.sync_db[settings.database_name]["current_stations"]
     
     @property
     def collection(self):
-        if self._collection is None:
-            from app.database.connection import get_database
-            db = get_database()
-            self._collection = db.current_stations
         return self._collection
     
     @property
@@ -146,17 +152,18 @@ class StationRepository(BaseRepository[Station]):
         """Upsert multiple stations at once"""
         if not stations:
             return {"matched": 0, "modified": 0, "upserted": 0}
-            
-        operations = [
-            {
-                "updateOne": {
-                    "filter": {"tomtom_id": station.tomtom_id},
-                    "update": {"$set": station.dict(by_alias=True)},
-                    "upsert": True
-                }
-            }
-            for station in stations
-        ]
+        
+        operations = []
+        for station in stations:
+            station_data = station.dict(by_alias=True)
+            if '_id' in station_data:
+                del station_data['_id']
+            operation = pymongo.UpdateOne(
+                filter={"tomtom_id": station.tomtom_id},
+                update={"$set": station_data},
+                upsert=True
+            )
+            operations.append(operation)
         
         result = await self.collection.bulk_write(operations)
         return {
@@ -203,5 +210,31 @@ class StationRepository(BaseRepository[Station]):
         result = await self.collection.delete_one({"tomtom_id": tomtom_id})
         return result.deleted_count > 0
 
-# Singleton instance
-station_repository = StationRepository() 
+    def upsert_stations_batch_sync(self, stations: List[Station]) -> Dict[str, int]:
+        """Upsert a batch of stations to the database (synchronous)"""
+        try:
+            operations = []
+            for station in stations:
+                station_dict = station.dict(by_alias=True)
+                if '_id' in station_dict:
+                    del station_dict['_id']
+                operations.append(
+                    pymongo.UpdateOne(
+                        {"tomtom_id": station.tomtom_id},
+                        {"$set": station_dict},
+                        upsert=True
+                    )
+                )
+            
+            result = self.sync_collection.bulk_write(operations)
+            return {
+                "matched": result.matched_count,
+                "modified": result.modified_count,
+                "upserted": result.upserted_count
+            }
+        except Exception as e:
+            logger.error(f"Error upserting stations batch (sync): {e}")
+            raise
+
+# Μην αρχικοποιούμε εδώ το instance
+# station_repository = StationRepository() 

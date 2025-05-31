@@ -1,7 +1,9 @@
-from app.repositories.station_repository import station_repository
+# from app.repositories.station_repository import station_repository
 from app.repositories.user_repository import user_repository
 from app.repositories.event_repository import event_repository
 from app.repositories.notification_repository import notification_repository
+from .station_repository import StationRepository
+from .historical_repository import HistoricalStationRepository
 
 class Repositories:
     def __init__(self):
@@ -33,5 +35,14 @@ class Repositories:
         if self._notifications is None:
             self._notifications = notification_repository
         return self._notifications
+
+# Lazy initialization των repositories
+station_repo = None
+historical_repo = None
+
+def init_repositories():
+    global station_repo, historical_repo
+    station_repo = StationRepository()
+    historical_repo = HistoricalStationRepository()
 
 repositories = Repositories() 
