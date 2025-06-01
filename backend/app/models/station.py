@@ -55,6 +55,7 @@ class Station(BaseModel):
     amenities: List[str] = []  # ["parking", "restaurant", "wifi", etc.]
     last_updated: datetime = Field(default_factory=datetime.utcnow)
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    availability_status_changes_count: int = Field(default=0, description="Cumulative count of availability status changes")
     
     class Config:
         populate_by_name = True
