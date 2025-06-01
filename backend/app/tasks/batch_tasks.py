@@ -49,6 +49,7 @@ def batch_update_stations(latitude: float, longitude: float, radius: int) -> dic
     Batch update stations from TomTom API for a given location and radius.
     This task fetches station data, upserts it to current_stations collection,
     and saves historical data to historical_stations collection.
+    It also calculates basic analytics like new/removed stations and status changes.
     
     Args:
         latitude (float): Latitude of the center point for search
@@ -65,23 +66,66 @@ def batch_update_stations(latitude: float, longitude: float, radius: int) -> dic
         init_repositories()
         
         # Fetch stations from TomTom API using synchronous method
-        stations: List[Station] = tomtom_service.search_charging_stations_sync(
+        stations_from_api: List[Station] = tomtom_service.search_charging_stations_sync(
             latitude=latitude,
             longitude=longitude,
             radius=radius
         )
         
-        logger.info(f"Fetched {len(stations)} stations from TomTom API")
+        logger.info(f"Fetched {len(stations_from_api)} stations from TomTom API")
+
+        if not stations_from_api:
+            logger.info("No stations fetched from TomTom API. Skipping further processing.")
+            return {
+                "status": "success",
+                "message": "No stations found or fetched from TomTom API.",
+                "location": {"latitude": latitude, "longitude": longitude, "radius": radius},
+                "fetched_count": 0,
+                "new_stations_count": 0,
+                "removed_stations_count": 0,
+                "upsert_result": {"upserted_count": 0, "matched_count": 0},
+                "historical_records_saved": 0
+            }
+
+        # Analytics: New/Removed Stations
+        current_db_tomtom_ids = set(station_repo.get_all_station_tomtom_ids_sync())
+        fetched_api_tomtom_ids = {s.tomtom_id for s in stations_from_api}
+
+        new_station_ids = fetched_api_tomtom_ids - current_db_tomtom_ids
+        removed_station_ids = current_db_tomtom_ids - fetched_api_tomtom_ids # Stations in DB but not in current API fetch
+
+        logger.info(f"New stations detected: {len(new_station_ids)}")
+        if new_station_ids:
+            logger.debug(f"New station IDs: {new_station_ids}")
+        logger.info(f"Stations no longer in API response (potentially removed or temporarily unavailable): {len(removed_station_ids)}")
+        if removed_station_ids:
+            logger.debug(f"Removed/missing station IDs: {removed_station_ids}")
+
+        stations_to_upsert: List[Station] = []
+        for station_api_data in stations_from_api:
+            existing_station_doc = station_repo.get_station_by_tomtom_id_sync(station_api_data.tomtom_id)
+            
+            current_availability_changes = station_api_data.availability_status_changes_count # Default is 0 from model
+
+            if existing_station_doc:
+                # Preserve existing count if field exists, otherwise start from model default (which is 0)
+                current_availability_changes = getattr(existing_station_doc, 'availability_status_changes_count', 0)
+                if existing_station_doc.status != station_api_data.status:
+                    current_availability_changes += 1
+            
+            # Update the station object fetched from API with the new count
+            station_api_data.availability_status_changes_count = current_availability_changes
+            stations_to_upsert.append(station_api_data)
         
         # Upsert stations to current_stations collection using synchronous method
-        upsert_result = station_repo.upsert_stations_batch_sync(stations)
+        upsert_result = station_repo.upsert_stations_batch_sync(stations_to_upsert)
         logger.info(f"Upserted stations to current_stations: {upsert_result}")
         
         # Prepare historical data with status snapshot
         historical_data = []
-        for station in stations:
+        for station in stations_to_upsert: # Use stations_to_upsert which has updated counts
             station_dict = station.dict(by_alias=True)
-            station_dict['station_id'] = station.tomtom_id
+            station_dict['station_id'] = station.tomtom_id # Ensure station_id for historical records
             station_dict['status_snapshot'] = {
                 "station_status": station.status,
                 "total_connectors": len(station.connectors),
@@ -90,7 +134,7 @@ def batch_update_stations(latitude: float, longitude: float, radius: int) -> dic
                 "out_of_order_connectors": sum(1 for c in station.connectors if c.status == "OUT_OF_ORDER")
             }
             station_dict['timestamp'] = datetime.utcnow()
-            if '_id' in station_dict:
+            if '_id' in station_dict: # Remove MongoDB's _id if it was somehow included from an existing doc
                 del station_dict['_id']
             historical_data.append(station_dict)
         
@@ -100,8 +144,11 @@ def batch_update_stations(latitude: float, longitude: float, radius: int) -> dic
         
         return {
             "status": "success",
-            "message": f"Batch update completed for {len(stations)} stations",
+            "message": f"Batch update completed for {len(stations_to_upsert)} stations",
             "location": {"latitude": latitude, "longitude": longitude, "radius": radius},
+            "fetched_count": len(stations_from_api),
+            "new_stations_count": len(new_station_ids),
+            "removed_stations_count": len(removed_station_ids), # Count of stations not in current API response
             "upsert_result": upsert_result,
             "historical_records_saved": historical_count
         }

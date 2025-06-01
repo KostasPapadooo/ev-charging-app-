@@ -42,4 +42,10 @@ celery_app.conf.update(
 celery_app.autodiscover_tasks(['app.tasks'])
 
 # Log Celery configuration
-logger.info("Celery configuration loaded with Redis broker and backend") 
+logger.info("Celery configuration loaded with Redis broker and backend")
+
+CELERY_IMPORTS = (
+    'app.tasks.batch_tasks',
+    'app.tasks.user_tasks',
+    'app.tasks.realtime_tasks'
+) 
