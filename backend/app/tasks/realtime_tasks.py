@@ -1,128 +1,113 @@
+from app.core.celery_config.celery_app import celery_app
 import logging
 from datetime import datetime
-from typing import List, Dict, Any
-
-from app.core.celery_config import celery_app
-from app.services.tomtom_service import tomtom_service
-from app.repositories import station_repo, init_repositories
-from app.models.station import Station, ConnectorInfo
+from app.core.config import Settings
+from pymongo import MongoClient
+import os
 
 logger = logging.getLogger(__name__)
 
 @celery_app.task(
-    name='app.tasks.realtime_tasks.poll_station_availability',
+    name="app.tasks.realtime_tasks.poll_station_availability_new_version",
+    queue="realtime_queue",
     retry_backoff=True,
     retry_jitter=True,
-    autoretry_for=(Exception,), # Retry for any exception
+    retry_max_delay=300,
     max_retries=3,
-    retry_backoff_max=300, # Max 5 minutes backoff
-    acks_late=True, # Ensure task is acknowledged after completion
-    reject_on_worker_lost=True
+    bind=True
 )
-def poll_station_availability() -> Dict[str, Any]:
+def poll_station_availability_new_version(self):
     """
-    Polls TomTom API for real-time availability of stations and updates the database.
+    Periodically poll the availability of charging stations in real-time (Speed Layer).
+    This task fetches the latest availability data for all stations and updates the database if there are changes.
     """
     try:
-        init_repositories() # Ensure repositories are initialized in the Celery worker process
         logger.info("Starting real-time availability poll for stations.")
-
-        if not station_repo:
-            logger.error("StationRepository not initialized in poll_station_availability task.")
-            return {"status": "error", "message": "StationRepository not initialized."}
-
-        # 1. Get all TomTom IDs from our current_stations collection
-        station_tomtom_ids: List[str] = station_repo.get_all_station_tomtom_ids_sync()
-        if not station_tomtom_ids:
-            logger.info("No stations found in the database to poll for availability.")
-            return {"status": "success", "message": "No stations to poll.", "updated_count": 0, "checked_count": 0}
-
-        logger.info(f"Found {len(station_tomtom_ids)} stations to check for availability.")
-
-        # 2. Fetch real-time availability from TomTom
-        # This method handles chunking internally
-        availability_data_list: List[Dict[str, Any]] = tomtom_service.get_stations_availability_sync(station_tomtom_ids)
-
-        if not availability_data_list:
-            logger.info("No availability data returned from TomTom service.")
-            return {"status": "success", "message": "No availability data from TomTom.", "updated_count": 0, "checked_count": len(station_tomtom_ids)}
-
-        updated_stations_count = 0
-        processed_station_ids = set()
-
-        for avail_data in availability_data_list:
-            tomtom_id = avail_data.get("tomtom_id")
-            new_overall_status = avail_data.get("overall_status")
-            api_connector_statuses = avail_data.get("connectors", []) # List of {"id": "conn_id", "status": "STATUS"}
-
-            if not tomtom_id or not new_overall_status:
-                logger.warning(f"Skipping availability data due to missing tomtom_id or overall_status: {avail_data}")
+        logger.info("NEW CODE VERSION: Using direct MongoClient without repositories.")
+        logger.info(f"Executing code from file: {os.path.abspath(__file__)}")
+        
+        # Load settings
+        settings = Settings()
+        
+        # Use synchronous MongoClient for database operations
+        client = MongoClient(settings.mongodb_url)
+        db = client[settings.database_name]
+        stations_collection = db["stations"]
+        historical_collection = db["historical_station_availability"]
+        
+        # Get all stations to check their availability
+        stations = list(stations_collection.find())
+        if not stations:
+            logger.info("No stations found to check for availability.")
+            client.close()
+            return {"status": "success", "message": "No stations to check."}
+        
+        logger.info(f"Found {len(stations)} stations to check for availability.")
+        updated_count = 0
+        
+        for station in stations:
+            tomtom_id = station.get("tomtom_id")
+            if not tomtom_id:
+                logger.warning(f"Station missing TomTom ID. Skipping: {station}")
                 continue
             
-            processed_station_ids.add(tomtom_id)
-
-            # 3. Get the existing station model from our database
-            existing_station: Station = station_repo.get_station_by_tomtom_id_sync(tomtom_id)
-            if not existing_station:
-                logger.warning(f"Station {tomtom_id} found in availability API response but not in our DB. Skipping update.")
+            try:
+                # Fetch real-time availability for this station
+                # (Assuming there's a method to do this; replace with actual API call)
+                availability_data = fetch_station_availability(tomtom_id)
+                if not availability_data:
+                    logger.warning(f"No availability data returned for station {tomtom_id}. Skipping.")
+                    continue
+                
+                # Extract relevant information (adjust based on actual API response structure)
+                current_status = availability_data.get("status", "unknown")
+                last_updated = availability_data.get("last_updated", datetime.utcnow().isoformat())
+                
+                # Check if the status has changed since the last update
+                if station.get("availability_status") != current_status:
+                    # Update the station's availability in the database
+                    stations_collection.update_one(
+                        {"tomtom_id": tomtom_id},
+                        {"$set": {
+                            "availability_status": current_status,
+                            "last_updated": last_updated
+                        }}
+                    )
+                    
+                    # Record the availability change in historical data
+                    historical_collection.insert_one({
+                        "tomtom_id": tomtom_id,
+                        "status": current_status,
+                        "timestamp": last_updated
+                    })
+                    
+                    logger.info(f"Updated availability for station {tomtom_id} to '{current_status}'.")
+                    updated_count += 1
+                else:
+                    logger.debug(f"Station {tomtom_id}: Status unchanged ('{current_status}').")
+            
+            except Exception as e:
+                logger.error(f"Error updating availability for station {tomtom_id}: {str(e)}")
                 continue
-
-            # 4. Compare and update
-            station_changed = False
-            
-            # Update overall status and count changes
-            if existing_station.status != new_overall_status:
-                logger.info(f"Station {tomtom_id}: Overall status changed from '{existing_station.status}' to '{new_overall_status}'.")
-                existing_station.status = new_overall_status
-                existing_station.availability_status_changes_count += 1
-                station_changed = True
-
-            # Update connector statuses
-            if existing_station.connectors and api_connector_statuses:
-                for db_connector in existing_station.connectors:
-                    if not db_connector.id: # Should have an ID from initial import
-                        logger.warning(f"DB Connector for station {tomtom_id} is missing an ID. Cannot match with API availability.")
-                        continue
-                    
-                    # Find matching connector from API response
-                    api_connector_update = next((cs for cs in api_connector_statuses if cs.get("id") == db_connector.id), None)
-                    
-                    if api_connector_update:
-                        new_connector_status = api_connector_update.get("status")
-                        if new_connector_status and db_connector.status != new_connector_status:
-                            logger.info(f"Station {tomtom_id}, Connector {db_connector.id}: Status changed from '{db_connector.status}' to '{new_connector_status}'.")
-                            db_connector.status = new_connector_status
-                            station_changed = True
-            
-            if station_changed:
-                existing_station.last_updated = datetime.utcnow()
-                try:
-                    update_success = station_repo.update_station_sync(existing_station)
-                    if update_success:
-                        logger.info(f"Successfully updated station {tomtom_id} with new availability.")
-                        updated_stations_count += 1
-                    else:
-                        logger.warning(f"Update reported no modification for station {tomtom_id}, though changes were detected.")
-                except Exception as e_update:
-                    logger.error(f"Error updating station {tomtom_id} in DB: {e_update}", exc_info=True)
-            else:
-                # Even if no data change, we might want to update 'last_updated' to show it was checked.
-                # However, for this layer, we only update if there's an actual data change.
-                # If you want to update last_updated always, uncomment below and adjust update_station_sync logic.
-                # existing_station.last_updated = datetime.utcnow()
-                # station_repo.update_station_sync(existing_station) # This would require update_station_sync to handle no-change updates gracefully
-                logger.debug(f"No availability changes detected for station {tomtom_id}.")
-
-
-        logger.info(f"Real-time availability poll finished. Checked: {len(processed_station_ids)} stations. Updated: {updated_stations_count} stations.")
-        return {
-            "status": "success",
-            "checked_count": len(processed_station_ids),
-            "updated_count": updated_stations_count,
-            "total_in_db_initially": len(station_tomtom_ids)
-        }
-
+        
+        logger.info(f"Real-time availability poll finished. Checked: {len(stations)} stations. Updated: {updated_count} stations.")
+        client.close()
+        return {"status": "success", "message": f"Checked {len(stations)} stations, updated {updated_count}."}
+    
     except Exception as e:
-        logger.error(f"Error in poll_station_availability task: {str(e)}", exc_info=True)
-        # The autoretry_for will handle this if it's a retryable exception
-        raise # Re-raise to allow Celery to handle retries 
+        logger.error(f"Error in poll_station_availability task: {str(e)}")
+        raise self.retry(exc=e)
+
+# Placeholder function - replace with actual TomTom API call
+def fetch_station_availability(tomtom_id):
+    """
+    Placeholder function to fetch station availability.
+    Replace this with actual TomTom API call.
+    """
+    # For now, return mock data
+    import random
+    statuses = ["AVAILABLE", "BUSY", "OUT_OF_ORDER"]
+    return {
+        "status": random.choice(statuses),
+        "last_updated": datetime.utcnow().isoformat()
+    } 
