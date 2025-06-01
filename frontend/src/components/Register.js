@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import axios from 'axios';
+import { useAuth } from '../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 const Register = () => {
     const [email, setEmail] = useState('');
@@ -9,31 +10,39 @@ const Register = () => {
     const [phone, setPhone] = useState('');
     const [subscriptionTier, setSubscriptionTier] = useState('free');
     const [error, setError] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    const { register } = useAuth();
+    const navigate = useNavigate();
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        setError(''); // Καθαρισμός προηγούμενων σφαλμάτων
+        setError('');
+        setLoading(true);
+
         try {
-            // Το API endpoint είναι τώρα /api/auth/register
-            const response = await axios.post('http://localhost:8000/api/auth/register', { 
+            const result = await register({
                 email,
-                password: password, // Αλλαγή από password_hash σε password
+                password,
                 first_name: firstName,
                 last_name: lastName,
-                phone: phone,
+                phone: phone || undefined,
                 subscription_tier: subscriptionTier,
             });
-            console.log('User registered:', response.data);
-            // TODO: Redirect to login page or show success message
-            // history.push('/login'); // Αν χρησιμοποιείτε useHistory από react-router-dom v5
-            // Για v6, χρησιμοποιήστε useNavigate
-        } catch (err) {
-            if (err.response && err.response.data && err.response.data.detail) {
-                setError(err.response.data.detail);
+
+            if (result.success) {
+                console.log('User registered:', result.user);
+                navigate('/login'); // Redirect to login after successful registration
             } else {
-                setError('Registration failed. Please try again.');
+                const errorMessage = typeof result.error === 'object' 
+                    ? JSON.stringify(result.error) 
+                    : result.error;
+                setError(errorMessage);
             }
-            console.error("Registration failed", err);
+        } catch (error) {
+            setError('An unexpected error occurred');
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -48,6 +57,7 @@ const Register = () => {
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
                     required
+                    disabled={loading}
                 />
                 <input
                     type="text"
@@ -55,6 +65,7 @@ const Register = () => {
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
                     required
+                    disabled={loading}
                 />
                 <input
                     type="email"
@@ -62,6 +73,7 @@ const Register = () => {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
+                    disabled={loading}
                 />
                 <input
                     type="password"
@@ -69,12 +81,14 @@ const Register = () => {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
+                    disabled={loading}
                 />
                 <input
                     type="tel"
                     placeholder="Phone (e.g., +1234567890)"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
+                    disabled={loading}
                 />
                 <div>
                     <label htmlFor="subscriptionTier">Subscription Tier:</label>
@@ -82,12 +96,15 @@ const Register = () => {
                         id="subscriptionTier"
                         value={subscriptionTier} 
                         onChange={(e) => setSubscriptionTier(e.target.value)}
+                        disabled={loading}
                     >
                         <option value="free">Free</option>
                         <option value="premium">Premium</option>
                     </select>
                 </div>
-                <button type="submit">Register</button>
+                <button type="submit" disabled={loading}>
+                    {loading ? 'Registering...' : 'Register'}
+                </button>
             </form>
         </div>
     );

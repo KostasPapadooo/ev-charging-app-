@@ -37,6 +37,10 @@ if settings.cors_origins:
 else:
     pass
 
+# Include routers AFTER app creation
+from app.routes.auth import router as auth_router
+app.include_router(auth_router, prefix="/api/auth")
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize database connection on startup"""

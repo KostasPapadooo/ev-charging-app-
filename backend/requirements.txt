@@ -2,7 +2,7 @@ aiosmtplib==3.0.2
 amqp==5.3.1
 annotated-types==0.7.0
 anyio==4.9.0
-bcrypt==4.3.0
+bcrypt==4.0.1
 bidict==0.23.1
 billiard==4.2.1
 blinker==1.9.0
@@ -45,8 +45,8 @@ pytest-asyncio==1.0.0
 python-dateutil==2.9.0.post0
 python-dotenv==1.1.0
 python-engineio==4.12.1
-python-jose==3.5.0
-python-multipart==0.0.20
+python-jose[cryptography]==3.3.0
+python-multipart==0.0.6
 python-socketio==5.13.0
 PyYAML==6.0.2
 redis==6.2.0

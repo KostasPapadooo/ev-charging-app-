@@ -26,7 +26,7 @@ class UserRepository(BaseRepository[User]):
     def model_class(self):
         return self._model_class
     
-    async def get_by_email(self, email: str) -> Optional[User]:
+    async def get_user_by_email(self, email: str) -> Optional[User]:
         """Get user by email"""
         try:
             doc = await self.collection.find_one({"email": email})
@@ -37,7 +37,11 @@ class UserRepository(BaseRepository[User]):
             logger.error(f"Error getting user by email {email}: {e}")
             raise
     
-    async def create_user(self, email: str, password: str, first_name: str, last_name: str, **kwargs) -> User:
+    async def find_by_email(self, email: str) -> Optional[User]:
+        """Find user by email - alias for get_user_by_email"""
+        return await self.get_user_by_email(email)
+
+    async def create_user(self, email: str, password: str, first_name: str, last_name: str, phone: str, subscription_tier: str) -> User:
         """Create new user with hashed password"""
         try:
             hashed_password = pwd_context.hash(password)
@@ -46,7 +50,11 @@ class UserRepository(BaseRepository[User]):
                 "password_hash": hashed_password,
                 "first_name": first_name,
                 "last_name": last_name,
-                **kwargs
+                "phone": phone,
+                "subscription_tier": subscription_tier,
+                "is_active": True,
+                "created_at": datetime.utcnow(),
+                "last_login": datetime.utcnow()
             }
             user = User(**user_data)
             return await self.create(user)
@@ -57,7 +65,7 @@ class UserRepository(BaseRepository[User]):
     async def authenticate_user(self, email: str, password: str) -> Optional[User]:
         """Authenticate user with email and password"""
         try:
-            user = await self.get_by_email(email)
+            user = await self.get_user_by_email(email)
             if user and pwd_context.verify(password, user.password_hash):
                 # Update last login
                 await self.update_by_id(user.id, {"last_login": datetime.utcnow()})
@@ -70,10 +78,10 @@ class UserRepository(BaseRepository[User]):
     async def update_user_preferences(self, user_id: str, preferences: dict) -> Optional[User]:
         """Update user preferences"""
         return await self.update_by_id(user_id, {"preferences": preferences})
-    
-    async def verify_user(self, user_id: str) -> Optional[User]:
-        """Mark user as verified"""
-        return await self.update_by_id(user_id, {"is_verified": True})
+
+    async def update_last_login(self, user_id: str) -> Optional[User]:
+        """Update user's last login timestamp"""
+        return await self.update_by_id(user_id, {"last_login": datetime.utcnow()})
 
 # Singleton instance
 user_repository = UserRepository() 

@@ -25,7 +25,6 @@ class User(BaseModel):
     last_name: str
     phone: str = "+1234567890"  # Έγκυρος αριθμός τηλεφώνου που ταιριάζει με το regex
     is_active: bool = True
-    is_verified: bool = False
     subscription_tier: str = "free"  # "free", "premium"
     location: dict = {  # Έγκυρο location object
         "type": "Point",
