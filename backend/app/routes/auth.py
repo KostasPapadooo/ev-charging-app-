@@ -47,6 +47,7 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     email: Optional[str] = None
+    user_id: Optional[str] = None
     subscription_tier: Optional[str] = None
 
 # Utility functions
@@ -95,14 +96,16 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
         email: str = payload.get("sub")
+        user_id: str = payload.get("user_id")
         subscription_tier: str = payload.get("subscription_tier")
-        if email is None:
+        if email is None or user_id is None:
             raise credentials_exception
-        token_data = TokenData(email=email, subscription_tier=subscription_tier)
+        token_data = TokenData(email=email, user_id=user_id, subscription_tier=subscription_tier)
     except JWTError:
         raise credentials_exception
     
-    user = await get_user_by_email(email=token_data.email)
+    # Use user_id for lookup instead of email for better uniqueness
+    user = await repositories.users.get_by_id(token_data.user_id)
     if user is None:
         raise credentials_exception
     return user
@@ -172,11 +175,12 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
         # Update last login
         await repositories.users.update_last_login(user.id)
         
-        # Create access token with email and subscription_tier
+        # Create access token with email, user_id, and subscription_tier
         access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
         access_token = create_access_token(
             data={
                 "sub": user.email,
+                "user_id": str(user.id),
                 "subscription_tier": user.subscription_tier
             }, 
             expires_delta=access_token_expires

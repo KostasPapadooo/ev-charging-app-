@@ -83,5 +83,20 @@ class UserRepository(BaseRepository[User]):
         """Update user's last login timestamp"""
         return await self.update_by_id(user_id, {"last_login": datetime.utcnow()})
 
+    async def get_by_id(self, user_id: str) -> Optional[User]:
+        """Get user by ID"""
+        try:
+            from bson import ObjectId
+            if isinstance(user_id, str):
+                user_id = ObjectId(user_id)
+            
+            doc = await self.collection.find_one({"_id": user_id})
+            if doc:
+                return self.model_class(**doc)
+            return None
+        except Exception as e:
+            logger.error(f"Error getting user by ID {user_id}: {e}")
+            raise
+
 # Singleton instance
 user_repository = UserRepository() 
