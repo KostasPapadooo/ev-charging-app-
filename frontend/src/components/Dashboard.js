@@ -1,5 +1,5 @@
 // frontend/src/components/Dashboard.js
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
@@ -16,11 +16,17 @@ L.Icon.Default.mergeOptions({
 });
 
 const Dashboard = () => {
-    const { user, logout, isAuthenticated } = useAuth();
+    const { logout, isAuthenticated } = useAuth();
     const navigate = useNavigate();
     const [stations, setStations] = useState([]);
+    const mapRef = useRef(null);
 
     useEffect(() => {
+        if (!isAuthenticated) {
+            navigate('/login');
+            return;
+        }
+
         // Fetch charging stations data (mock data for now)
         const fetchStations = async () => {
             // Replace with your API call to fetch stations
@@ -32,10 +38,10 @@ const Dashboard = () => {
         };
 
         fetchStations();
-    }, []);
+    }, [isAuthenticated, navigate]);
 
+    // Early return if not authenticated
     if (!isAuthenticated) {
-        navigate('/login');
         return null;
     }
 
@@ -48,7 +54,13 @@ const Dashboard = () => {
         <div className="dashboard-container">
             <h2>Charging Stations</h2>
             <div className="charging-station-map">
-                <MapContainer center={[51.505, -0.09]} zoom={13} style={{ height: "400px", width: "100%" }}>
+                <MapContainer 
+                    key="dashboard-map"
+                    center={[51.505, -0.09]} 
+                    zoom={13} 
+                    style={{ height: "400px", width: "100%" }}
+                    ref={mapRef}
+                >
                     <TileLayer
                         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
