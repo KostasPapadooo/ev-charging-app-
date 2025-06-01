@@ -6,7 +6,7 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 @celery_app.task(
-    name="batch_update_stations",
+    name="app.tasks.batch_tasks.batch_update_stations",
     queue="batch_queue",
     retry_backoff=True,
     retry_jitter=True,
@@ -79,7 +79,7 @@ def batch_update_stations(self, latitude, longitude, radius, city_name=None):
         raise self.retry(exc=e)
 
 @celery_app.task(
-    name="cleanup_old_historical_data",
+    name="app.tasks.batch_tasks.cleanup_old_historical_data",
     queue="batch_queue",
     retry_backoff=True,
     retry_jitter=True,

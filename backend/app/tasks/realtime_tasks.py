@@ -32,7 +32,7 @@ def poll_station_availability_new_version(self):
         # Use synchronous MongoClient for database operations
         client = MongoClient(settings.mongodb_url)
         db = client[settings.database_name]
-        stations_collection = db["stations"]
+        stations_collection = db["current_stations"]
         historical_collection = db["historical_station_availability"]
         
         # Get all stations to check their availability
@@ -64,12 +64,12 @@ def poll_station_availability_new_version(self):
                 last_updated = availability_data.get("last_updated", datetime.utcnow().isoformat())
                 
                 # Check if the status has changed since the last update
-                if station.get("availability_status") != current_status:
+                if station.get("status") != current_status:
                     # Update the station's availability in the database
                     stations_collection.update_one(
                         {"tomtom_id": tomtom_id},
                         {"$set": {
-                            "availability_status": current_status,
+                            "status": current_status,
                             "last_updated": last_updated
                         }}
                     )
