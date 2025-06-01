@@ -1,0 +1,31 @@
+.navigation {
+    display: flex;
+    justify-content: space-evenly;
+    align-items: center;
+    padding: 1rem;
+    background-color: #e9a4f9;
+}
+
+.nav-link {
+    text-decoration: none;
+    color: #000;
+    font-size: 1.2rem;
+
+    &:hover {
+        color: #b926cf;
+    }
+}
+
+.logout-button {
+    width: 5.5rem;
+    background-color: #b926cf;
+    color: #000;
+    border: none;
+    text-decoration: none;
+    font-size: 1.2rem;
+    border-radius: 0.7rem;
+    
+    &:hover {
+         background-color: #d72df1;
+     }
+}

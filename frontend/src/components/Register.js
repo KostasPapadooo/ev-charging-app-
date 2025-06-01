@@ -1,6 +1,8 @@
+// frontend/src/components/Register.js
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import '../styles/register.css'; // Import the new CSS file
 
 const Register = () => {
     const [email, setEmail] = useState('');
@@ -47,9 +49,9 @@ const Register = () => {
     };
 
     return (
-        <div>
+        <div className="register-container">
             <h2>Register</h2>
-            {error && <p style={{ color: 'red' }}>{error}</p>}
+            {error && <p className="error-message">{error}</p>}
             <form onSubmit={handleSubmit}>
                 <input
                     type="text"
@@ -90,11 +92,12 @@ const Register = () => {
                     onChange={(e) => setPhone(e.target.value)}
                     disabled={loading}
                 />
-                <div>
-                    <label htmlFor="subscriptionTier">Subscription Tier:</label>
+                <div className="subscription-tier-container">
+                    <label htmlFor="subscriptionTier" className="subscription-tier-label">Subscription Tier:</label>
                     <select 
                         id="subscriptionTier"
                         value={subscriptionTier} 
+                        className="subscription-tier-select"
                         onChange={(e) => setSubscriptionTier(e.target.value)}
                         disabled={loading}
                     >

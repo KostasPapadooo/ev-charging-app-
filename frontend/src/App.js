@@ -3,6 +3,7 @@ import React from 'react';
 import { BrowserRouter as Router, Route, Routes, Link } from 'react-router-dom';
 // import logo from './logo.svg'; // Αφαιρέθηκε το logo προς το παρόν
 import './App.css';
+import './styles/header.css';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Register from './components/Register';
 import Login from './components/Login';
@@ -12,20 +13,20 @@ function Navigation() {
   const { isAuthenticated, user, logout } = useAuth();
 
   return (
-    <nav style={{ padding: '1rem', borderBottom: '1px solid #ccc' }}>
-      <Link to="/" style={{ marginRight: '1rem' }}>Home</Link>
+    <nav className="navigation">
+      <Link to="/" className="nav-link">Home</Link>
       {!isAuthenticated ? (
         <>
-          <Link to="/login" style={{ marginRight: '1rem' }}>Login</Link>
-          <Link to="/register" style={{ marginRight: '1rem' }}>Register</Link>
+          <Link to="/login" className="nav-link">Login</Link>
+          <Link to="/register" className="nav-link">Register</Link>
         </>
       ) : (
         <>
-          <Link to="/dashboard" style={{ marginRight: '1rem' }}>Dashboard</Link>
-          <span style={{ marginRight: '1rem' }}>
+          <Link to="/dashboard" className="nav-link">Dashboard</Link>
+          <span className="nav-link">
             Welcome, {user?.first_name} ({user?.subscription_tier})
           </span>
-          <button onClick={logout}>Logout</button>
+          <button onClick={logout} className="logout-button">Logout</button>
         </>
       )}
     </nav>

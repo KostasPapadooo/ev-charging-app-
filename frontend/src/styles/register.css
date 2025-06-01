@@ -1,0 +1,75 @@
+/* frontend/src/styles/register.css */
+
+.register-container {
+    max-width: 400px;
+    margin: 20px auto;
+    padding: 0 1.5rem 1.5rem 1.5rem;
+    border: 1.5px solid #f7e6fa;
+    border-radius: 25px;
+    background-color: #fef9fe;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.register-container h2 {
+    text-align: center;
+    margin-bottom: 1rem;
+}
+
+.register-container input {
+    width: 92.5%;
+    padding: 0.8rem;
+    margin: 0.5rem 0;
+    border: 1px solid #e0d1e2;
+    border-radius: 15px;
+    font-size: 1rem;
+}
+
+.register-container button {
+    width: 100%;
+    padding: 0.8rem;
+    margin-top: 1rem;
+    background-color: #9a37a1;
+    border: 1px solid #9a37a1;
+    color: white;
+    border-radius: 15px;
+    font-size: 1rem;
+    cursor: pointer;
+}
+
+.register-container button:hover {
+    background-color: #be4fc6;
+    border: 1px solid #000000;
+}
+
+.subscription-tier-container {
+    width: 92.5%;
+    margin: 0.5rem 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.subscription-tier-label {
+    font-size: 1rem;
+    padding: 0.8rem;
+}
+
+.subscription-tier-select {
+    width: 200px;
+    padding: 0.8rem;
+    border-radius: 15px;
+    font-size: 1rem;
+    background-color: #fdf3ff;
+    border: 1px solid #e0d1e2;
+
+    &:hover {
+        background-color: #f8e3fa;
+        border: 1px solid #8d199c;
+    }
+}
+
+.error-message {
+    color: red;
+    text-align: center;
+    margin-bottom: 1rem;
+}

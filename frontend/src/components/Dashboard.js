@@ -1,6 +1,7 @@
 import React from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import '../styles/dashboard.css';
 
 const Dashboard = () => {
     const { user, logout, isAuthenticated } = useAuth();
@@ -27,7 +28,7 @@ const Dashboard = () => {
                 <p><strong>Account Status:</strong> {user.is_active ? 'Active' : 'Inactive'}</p>
                 <p><strong>Member Since:</strong> {new Date(user.created_at).toLocaleDateString()}</p>
             </div>
-            <button onClick={handleLogout}>Logout</button>
+            <button onClick={handleLogout} className="logout-button">Logout</button>
         </div>
     );
 };

@@ -38,7 +38,6 @@ class UserResponse(BaseModel):
     phone: str
     subscription_tier: str
     is_active: bool
-    is_verified: bool
     created_at: datetime
 
 class Token(BaseModel):
@@ -140,7 +139,6 @@ async def register_user(user_in: UserCreateRequest):
             phone=created_user.phone,
             subscription_tier=created_user.subscription_tier,
             is_active=created_user.is_active,
-            is_verified=created_user.is_verified,
             created_at=created_user.created_at
         )
         
@@ -196,7 +194,6 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
                 phone=user.phone,
                 subscription_tier=user.subscription_tier,
                 is_active=user.is_active,
-                is_verified=user.is_verified,
                 created_at=user.created_at
             )
         }
@@ -221,7 +218,6 @@ async def read_users_me(current_user: User = Depends(get_current_user)):
         phone=current_user.phone,
         subscription_tier=current_user.subscription_tier,
         is_active=current_user.is_active,
-        is_verified=current_user.is_verified,
         created_at=current_user.created_at
     )
 
