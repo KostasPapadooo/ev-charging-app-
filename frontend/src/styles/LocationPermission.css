@@ -1,0 +1,361 @@
+/* Location Permission Modal Styles */
+.location-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  backdrop-filter: blur(4px);
+}
+
+.location-modal {
+  background: white;
+  border-radius: 16px;
+  padding: 0;
+  max-width: 480px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+  animation: modalSlideIn 0.3s ease-out;
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.location-modal-header {
+  background: linear-gradient(135deg, #007bff, #0056b3);
+  color: white;
+  padding: 24px;
+  border-radius: 16px 16px 0 0;
+  text-align: center;
+}
+
+.location-modal-header h2 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.location-modal-content {
+  padding: 32px 24px;
+  text-align: center;
+}
+
+.location-icon {
+  font-size: 64px;
+  margin-bottom: 20px;
+  display: block;
+}
+
+.location-message {
+  font-size: 18px;
+  color: #495057;
+  margin-bottom: 24px;
+  line-height: 1.5;
+}
+
+.location-benefits {
+  background: #f8f9fa;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 20px;
+  text-align: left;
+}
+
+.location-benefits h4 {
+  margin: 0 0 12px 0;
+  color: #495057;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.location-benefits ul {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+}
+
+.location-benefits li {
+  padding: 6px 0;
+  color: #6c757d;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.location-privacy {
+  background: #e3f2fd;
+  border: 1px solid #bbdefb;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 24px;
+}
+
+.privacy-note {
+  margin: 0;
+  font-size: 13px;
+  color: #1565c0;
+  line-height: 1.4;
+}
+
+.location-modal-actions {
+  padding: 0 24px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.location-allow-btn {
+  background: linear-gradient(135deg, #28a745, #20c997);
+  color: white;
+  border: none;
+  padding: 16px 24px;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+}
+
+.location-allow-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(40, 167, 69, 0.4);
+}
+
+.location-allow-btn:active {
+  transform: translateY(0);
+}
+
+.location-deny-btn {
+  background: #6c757d;
+  color: white;
+  border: none;
+  padding: 14px 24px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.location-deny-btn:hover {
+  background: #5a6268;
+  transform: translateY(-1px);
+}
+
+.location-deny-btn:active {
+  transform: translateY(0);
+}
+
+/* GPS Detection Loading State */
+.location-detecting {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px 20px;
+  background: #e3f2fd;
+  border-radius: 12px;
+  margin: 40px 20px;
+  text-align: center;
+}
+
+.location-detecting-spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid #bbdefb;
+  border-top: 3px solid #1976d2;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.location-detecting-text {
+  color: #1565c0;
+  font-weight: 500;
+  font-size: 16px;
+}
+
+/* Location Error Container */
+.location-error-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 400px;
+  padding: 20px;
+}
+
+.location-error {
+  text-align: center;
+  padding: 40px;
+  background: #f8f9fa;
+  border-radius: 12px;
+  max-width: 600px;
+  width: 100%;
+}
+
+.location-error h3 {
+  color: #495057;
+  margin-bottom: 15px;
+  font-size: 24px;
+}
+
+.location-error .error-message {
+  color: #dc3545;
+  margin-bottom: 25px;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.location-instructions {
+  background: white;
+  border-radius: 8px;
+  padding: 20px;
+  margin: 20px 0;
+  text-align: left;
+}
+
+.location-instructions h4 {
+  color: #495057;
+  margin-bottom: 10px;
+  font-size: 16px;
+}
+
+.location-instructions ol {
+  margin: 10px 0;
+  padding-left: 20px;
+  color: #6c757d;
+}
+
+.location-instructions li {
+  margin: 8px 0;
+  line-height: 1.4;
+}
+
+.alternative-note {
+  background: #fff3cd;
+  border: 1px solid #ffeaa7;
+  border-radius: 6px;
+  padding: 12px;
+  margin-top: 15px;
+  font-size: 14px;
+  color: #856404;
+}
+
+.location-error-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 25px;
+}
+
+.retry-location-button {
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  min-width: 160px;
+}
+
+.retry-location-button.primary {
+  background: #007bff;
+  color: white;
+}
+
+.retry-location-button.primary:hover {
+  background: #0056b3;
+  transform: translateY(-1px);
+}
+
+.retry-location-button.secondary {
+  background: #6c757d;
+  color: white;
+}
+
+.retry-location-button.secondary:hover {
+  background: #5a6268;
+  transform: translateY(-1px);
+}
+
+/* Responsive design */
+@media (max-width: 480px) {
+  .location-modal {
+    width: 95%;
+    margin: 20px;
+  }
+  
+  .location-modal-header {
+    padding: 20px;
+  }
+  
+  .location-modal-header h2 {
+    font-size: 20px;
+  }
+  
+  .location-modal-content {
+    padding: 24px 20px;
+  }
+  
+  .location-icon {
+    font-size: 48px;
+  }
+  
+  .location-message {
+    font-size: 16px;
+  }
+  
+  .location-modal-actions {
+    padding: 0 20px 20px 20px;
+  }
+  
+  .location-detecting {
+    margin: 20px 10px;
+    padding: 30px 15px;
+  }
+  
+  .location-detecting-text {
+    font-size: 14px;
+  }
+  
+  .location-error {
+    padding: 30px 20px;
+  }
+  
+  .location-error h3 {
+    font-size: 20px;
+  }
+  
+  .location-error-actions {
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .retry-location-button {
+    width: 100%;
+    max-width: 280px;
+  }
+} 

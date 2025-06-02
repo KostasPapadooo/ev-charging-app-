@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
-import { fetchNearbyStations, getCurrentLocation } from '../services/stationsApi';
+import { fetchNearbyStations } from '../services/stationsApi';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -42,62 +42,37 @@ const getMarkerColor = (status) => {
   }
 };
 
-const StationsMap = () => {
+const StationsMap = ({ userLocation, locationPermission }) => {
   const [stations, setStations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
   const [error, setError] = useState(null);
-  const [userLocation, setUserLocation] = useState(null);
   const [searchParams, setSearchParams] = useState(null);
-  const [radius, setRadius] = useState(5000); // Default 5km
-  const [locationPermission, setLocationPermission] = useState('prompt'); // 'granted', 'denied', 'prompt'
+  const [radius, setRadius] = useState(5000);
 
+  // Load stations when component mounts or when filters change
   useEffect(() => {
-    requestLocationAndLoadStations();
-  }, [filter, radius]);
+    if (userLocation && locationPermission === 'granted') {
+      loadNearbyStations(userLocation.lat, userLocation.lon);
+    }
+  }, [userLocation, locationPermission, filter, radius]);
 
   // Auto-refresh every 30 seconds
   useEffect(() => {
-    if (userLocation) {
+    if (userLocation && locationPermission === 'granted') {
       const interval = setInterval(() => {
         loadNearbyStations(userLocation.lat, userLocation.lon);
       }, 30000);
 
       return () => clearInterval(interval);
     }
-  }, [filter, radius, userLocation]);
+  }, [userLocation, locationPermission, filter, radius]);
 
-  const requestLocationAndLoadStations = async () => {
+  const loadNearbyStations = async (lat, lon) => {
     try {
       setLoading(true);
       setError(null);
       
-      console.log('Requesting user location...');
-      const location = await getCurrentLocation();
-      
-      console.log('Location obtained:', location);
-      setUserLocation(location);
-      setLocationPermission('granted');
-      
-      await loadNearbyStations(location.lat, location.lon);
-      
-    } catch (error) {
-      console.error('Location error:', error);
-      setLocationPermission('denied');
-      setError(`Location access required: ${error.message}`);
-      
-      // Fallback to Athens center if location is denied
-      const fallbackLocation = { lat: 37.9755, lon: 23.7348 };
-      setUserLocation(fallbackLocation);
-      await loadNearbyStations(fallbackLocation.lat, fallbackLocation.lon);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadNearbyStations = async (lat, lon) => {
-    try {
-      setError(null);
       const filters = {
         radius: radius,
         ...(filter && { status: filter })
@@ -107,17 +82,21 @@ const StationsMap = () => {
       const data = await fetchNearbyStations(lat, lon, filters);
       
       setStations(data.stations);
-      setSearchParams(data.searchParams);
+      setSearchParams(data.search_params);
       
       console.log(`Loaded ${data.stations.length} nearby stations`);
     } catch (error) {
       console.error('Failed to load nearby stations:', error);
       setError('Failed to load nearby stations. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleRetryLocation = () => {
-    requestLocationAndLoadStations();
+  const handleRefresh = () => {
+    if (userLocation) {
+      loadNearbyStations(userLocation.lat, userLocation.lon);
+    }
   };
 
   const handleRadiusChange = (newRadius) => {
@@ -136,31 +115,16 @@ const StationsMap = () => {
 
   const stats = getStatusStats();
 
-  if (error && locationPermission === 'denied') {
-    return (
-      <div className="error-container">
-        <div className="location-error">
-          <h3>📍 Location Access Required</h3>
-          <p className="error-message">{error}</p>
-          <p>To show nearby charging stations, please:</p>
-          <ol>
-            <li>Click the location icon in your browser's address bar</li>
-            <li>Select "Allow" for location access</li>
-            <li>Refresh the page</li>
-          </ol>
-          <button onClick={handleRetryLocation} className="retry-button">
-            Try Again
-          </button>
-        </div>
-      </div>
-    );
+  // Don't render anything if we don't have user location
+  if (!userLocation || locationPermission !== 'granted') {
+    return null;
   }
 
   if (error) {
     return (
       <div className="error-container">
         <p className="error-message">{error}</p>
-        <button onClick={handleRetryLocation} className="retry-button">
+        <button onClick={handleRefresh} className="retry-button">
           Retry
         </button>
       </div>
@@ -200,19 +164,17 @@ const StationsMap = () => {
         </div>
 
         <div className="location-info">
-          {userLocation && (
-            <div className="current-location">
-              <span className="location-icon">📍</span>
-              <span>
-                Your Location: {userLocation.lat.toFixed(4)}, {userLocation.lon.toFixed(4)}
+          <div className="current-location">
+            <span className="location-icon">📍</span>
+            <span>
+              Your Location: {userLocation.lat.toFixed(4)}, {userLocation.lon.toFixed(4)}
+            </span>
+            {userLocation.accuracy && (
+              <span className="accuracy">
+                (±{Math.round(userLocation.accuracy)}m)
               </span>
-              {userLocation.accuracy && (
-                <span className="accuracy">
-                  (±{Math.round(userLocation.accuracy)}m)
-                </span>
-              )}
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         <div className="stations-stats">
@@ -234,8 +196,8 @@ const StationsMap = () => {
           </div>
         </div>
 
-        <button onClick={() => requestLocationAndLoadStations()} className="refresh-button">
-          🔄 Refresh
+        <button onClick={handleRefresh} className="refresh-button" disabled={loading}>
+          {loading ? '⏳ Loading...' : '🔄 Refresh'}
         </button>
       </div>
 
@@ -249,9 +211,17 @@ const StationsMap = () => {
       )}
 
       <div className="map-wrapper">
+        {loading && (
+          <div className="loading-overlay">
+            <div className="loading-spinner">
+              Loading nearby stations...
+            </div>
+          </div>
+        )}
+        
         <MapContainer
-          center={userLocation ? [userLocation.lat, userLocation.lon] : [37.9755, 23.7348]}
-          zoom={userLocation ? 13 : 11}
+          center={[userLocation.lat, userLocation.lon]}
+          zoom={13}
           style={{ height: '600px', width: '100%' }}
           className="stations-map"
         >
@@ -261,37 +231,33 @@ const StationsMap = () => {
           />
           
           {/* User location marker */}
-          {userLocation && (
-            <>
-              <Marker
-                position={[userLocation.lat, userLocation.lon]}
-                icon={createUserIcon()}
-              >
-                <Popup>
-                  <div className="user-location-popup">
-                    <h4>📍 Your Location</h4>
-                    <p>Lat: {userLocation.lat.toFixed(6)}</p>
-                    <p>Lon: {userLocation.lon.toFixed(6)}</p>
-                    {userLocation.accuracy && (
-                      <p>Accuracy: ±{Math.round(userLocation.accuracy)}m</p>
-                    )}
-                  </div>
-                </Popup>
-              </Marker>
-              
-              {/* Search radius circle */}
-              <Circle
-                center={[userLocation.lat, userLocation.lon]}
-                radius={radius}
-                pathOptions={{
-                  color: '#007bff',
-                  fillColor: '#007bff',
-                  fillOpacity: 0.1,
-                  weight: 2
-                }}
-              />
-            </>
-          )}
+          <Marker
+            position={[userLocation.lat, userLocation.lon]}
+            icon={createUserIcon()}
+          >
+            <Popup>
+              <div className="user-location-popup">
+                <h4>📍 Your Location</h4>
+                <p>Lat: {userLocation.lat.toFixed(6)}</p>
+                <p>Lon: {userLocation.lon.toFixed(6)}</p>
+                {userLocation.accuracy && (
+                  <p>Accuracy: ±{Math.round(userLocation.accuracy)}m</p>
+                )}
+              </div>
+            </Popup>
+          </Marker>
+          
+          {/* Search radius circle */}
+          <Circle
+            center={[userLocation.lat, userLocation.lon]}
+            radius={radius}
+            pathOptions={{
+              color: '#007bff',
+              fillColor: '#007bff',
+              fillOpacity: 0.1,
+              weight: 2
+            }}
+          />
           
           {/* Station markers */}
           {stations.map((station) => (
@@ -370,14 +336,6 @@ const StationsMap = () => {
           ))}
         </MapContainer>
       </div>
-
-      {loading && (
-        <div className="loading-overlay">
-          <div className="loading-spinner">
-            {userLocation ? 'Loading nearby stations...' : 'Getting your location...'}
-          </div>
-        </div>
-      )}
     </div>
   );
 };
