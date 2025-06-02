@@ -5,9 +5,10 @@ import { BrowserRouter as Router, Route, Routes, Link } from 'react-router-dom';
 import './App.css';
 import './styles/header.css';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import Register from './components/Register';
-import Login from './components/Login';
-import Dashboard from './components/Dashboard';
+import Register from './pages/Register';
+import Login from './pages/Login';
+import Dashboard from './pages/Dashboard';
+import './styles/Dashboard.css';
 
 function Navigation() {
   const { isAuthenticated, user, logout } = useAuth();

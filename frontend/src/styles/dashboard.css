@@ -1,9 +1,0 @@
-/* frontend/src/styles/dashboard.css */
-.dashboard-container {
-    padding: 20px;
-}
-
-.charging-station-map {
-    margin: 20px 0;
-    height: 400px; /* Ensure the map has a height */
-}

@@ -14,7 +14,7 @@ from app.repositories import repositories
 from app.models.user import User, UserPreferences
 from app.models.event import Event
 from app.models.station import Station, StationLocation, ConnectorInfo, OperatorInfo
-from app.api.stations import router as stations_router
+from app.api import stations  # Βεβαιωθείτε ότι αυτό υπάρχει
 from app.api.auth import router as auth_router
 
 # Configure logging
@@ -53,7 +53,7 @@ if settings.cors_origins:
     )
 
 # Include routers
-app.include_router(stations_router, prefix="/api/stations", tags=["stations"])
+app.include_router(stations.router, prefix="/api/stations", tags=["stations"])
 app.include_router(auth_router, prefix="/api/auth", tags=["authentication"])
 
 @app.get("/")
