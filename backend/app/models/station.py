@@ -56,6 +56,7 @@ class Station(BaseModel):
     last_updated: datetime = Field(default_factory=datetime.utcnow)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     availability_status_changes_count: int = Field(default=0, description="Cumulative count of availability status changes")
+    data_source: str = "UNKNOWN"
     
     class Config:
         populate_by_name = True

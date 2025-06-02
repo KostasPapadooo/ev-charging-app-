@@ -1,33 +1,33 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import List, Optional
 from app.models.station import Station
-from app.repositories.station_repository import StationRepository
+from app.repositories.station_repository import station_repository  # Use singleton
 from app.core.config import Settings
 import logging
 
 logger = logging.getLogger(__name__)
 settings = Settings()
 
-router = APIRouter(prefix="/api/stations", tags=["stations"])
+# Remove prefix from router - it's added in main.py
+router = APIRouter(tags=["stations"])
 
 @router.get("/", response_model=List[Station])
 async def get_all_stations(
-    status: Optional[str] = Query(None, description="Filter by status: AVAILABLE, BUSY, OUT_OF_ORDER"),
-    limit: Optional[int] = Query(None, description="Limit number of results")
+    status: Optional[str] = None,  # Remove Query() for direct calls
+    limit: Optional[int] = None    # Remove Query() for direct calls
 ):
     """
     Get all stations with real-time availability data.
-    Updated every 5 minutes by the Speed Layer.
+    Updated every 30 minutes by the Batch Layer.
     """
     try:
-        station_repo = StationRepository()
-        
         # Build filter
         filter_dict = {}
-        if status:
+        if status is not None:
             filter_dict["status"] = status.upper()
         
-        stations = station_repo.get_all_stations(filter_dict=filter_dict, limit=limit)
+        # Use async call with await
+        stations = await station_repository.get_all_stations(filter_dict=filter_dict, limit=limit)
         
         if not stations:
             return []
@@ -42,11 +42,11 @@ async def get_all_stations(
 @router.get("/{station_id}", response_model=Station)
 async def get_station_by_id(station_id: str):
     """
-    Get a specific station by its ID.
+    Get a specific station by its TomTom ID.
     """
     try:
-        station_repo = StationRepository()
-        station = station_repo.get_station_by_id(station_id)
+        # Use async call with await
+        station = await station_repository.get_station_by_id(station_id)
         
         if not station:
             raise HTTPException(status_code=404, detail="Station not found")
@@ -62,31 +62,31 @@ async def get_station_by_id(station_id: str):
 
 @router.get("/nearby/search")
 async def get_nearby_stations(
-    lat: float = Query(..., description="Latitude"),
-    lon: float = Query(..., description="Longitude"), 
-    radius: int = Query(5000, description="Search radius in meters"),
-    status: Optional[str] = Query(None, description="Filter by status: AVAILABLE, BUSY, OUT_OF_ORDER"),
-    limit: Optional[int] = Query(50, description="Limit number of results")
+    lat: float,                    # Remove Query() for direct calls
+    lon: float,                    # Remove Query() for direct calls
+    radius: int = 5000,            # Remove Query() for direct calls
+    status: Optional[str] = None,  # Remove Query() for direct calls
+    limit: Optional[int] = 50      # Remove Query() for direct calls
 ):
     """
     Find nearby stations within specified radius.
-    Uses real-time data from our database.
+    Uses geospatial indexing for fast queries.
     """
     try:
-        station_repo = StationRepository()
-        
-        # Build filter
-        filter_dict = {}
-        if status:
-            filter_dict["status"] = status.upper()
-            
-        stations = station_repo.get_nearby_stations(
+        # Use correct method signature
+        stations = await station_repository.find_nearby_stations(
+            longitude=lon,  # Note: longitude first in MongoDB
             latitude=lat,
-            longitude=lon,
-            radius_meters=radius,
-            filter_dict=filter_dict,
-            limit=limit
+            max_distance_meters=radius
         )
+        
+        # Apply status filter if provided
+        if status is not None:
+            stations = [s for s in stations if s.status.upper() == status.upper()]
+        
+        # Apply limit if provided
+        if limit is not None:
+            stations = stations[:limit]
         
         logger.info(f"Found {len(stations)} nearby stations within {radius}m of ({lat}, {lon})")
         return {
@@ -110,19 +110,20 @@ async def get_stations_summary():
     Get summary statistics of all stations.
     """
     try:
-        station_repo = StationRepository()
+        # Get all stations and calculate stats
+        all_stations = await station_repository.get_all_stations()
         
-        total_stations = station_repo.count_stations()
-        available_stations = station_repo.count_stations({"status": "AVAILABLE"})
-        busy_stations = station_repo.count_stations({"status": "BUSY"})
-        out_of_order_stations = station_repo.count_stations({"status": "OUT_OF_ORDER"})
+        total_stations = len(all_stations)
+        available_stations = len([s for s in all_stations if s.status == "AVAILABLE"])
+        busy_stations = len([s for s in all_stations if s.status == "BUSY"])
+        out_of_order_stations = len([s for s in all_stations if s.status == "OUT_OF_ORDER"])
         
         return {
             "total_stations": total_stations,
             "available": available_stations,
             "busy": busy_stations,
             "out_of_order": out_of_order_stations,
-            "last_updated": "Updated every 5 minutes by Speed Layer"
+            "last_updated": "Updated every 30 minutes by Batch Layer"
         }
         
     except Exception as e:

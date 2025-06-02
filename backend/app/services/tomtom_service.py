@@ -223,7 +223,8 @@ class TomTomService:
                 opening_hours=None,
                 amenities=[],
                 last_updated=datetime.utcnow(),
-                created_at=datetime.utcnow()
+                created_at=datetime.utcnow(),
+                data_source="TOMTOM"
             )
             
             return station

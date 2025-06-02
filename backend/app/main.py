@@ -4,6 +4,7 @@ import uvicorn
 import logging
 import time
 from datetime import datetime
+from contextlib import asynccontextmanager
 
 from app.core.config import settings
 from app.database.connection import connect_to_mongo, close_mongo_connection
@@ -12,17 +13,33 @@ from app.core.exceptions import TomTomAPIException
 from app.repositories import repositories
 from app.models.user import User, UserPreferences
 from app.models.event import Event
-from app.services.opencharge_service import opencharge_service
 from app.models.station import Station, StationLocation, ConnectorInfo, OperatorInfo
+from app.api.stations import router as stations_router
+from app.api.auth import router as auth_router
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    await connect_to_mongo()
+    # Αρχικοποίηση των repositories μετά τη σύνδεση στη βάση δεδομένων
+    from app.repositories import init_repositories
+    await init_repositories()  # Make it async
+    logger.info("Application startup complete")
+    yield
+    # Shutdown
+    await close_mongo_connection()
+    await tomtom_service.close()
+    logger.info("Application shutdown complete")
+
 app = FastAPI(
     title=settings.app_name,
     description="API for managing EV charging stations with real-time notifications",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # CORS middleware
@@ -34,28 +51,10 @@ if settings.cors_origins:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-else:
-    pass
 
-# Include routers AFTER app creation
-from app.routes.auth import router as auth_router
-app.include_router(auth_router, prefix="/api/auth")
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize database connection on startup"""
-    await connect_to_mongo()
-    # Αρχικοποίηση των repositories μετά τη σύνδεση στη βάση δεδομένων
-    from app.repositories import init_repositories
-    init_repositories()
-    logger.info("Application startup complete")
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Close database connection on shutdown"""
-    await close_mongo_connection()
-    await tomtom_service.close()
-    logger.info("Application shutdown complete")
+# Include routers
+app.include_router(stations_router, prefix="/api/stations", tags=["stations"])
+app.include_router(auth_router, prefix="/api/auth", tags=["authentication"])
 
 @app.get("/")
 async def root():
@@ -68,26 +67,8 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    """Detailed health check"""
-    try:
-        from app.database.connection import get_database
-        
-        db = get_database()
-        # Test database connection
-        collections = await db.list_collection_names()
-        
-        return {
-            "status": "healthy",
-            "database": "connected",
-            "collections": len(collections),
-            "collections_list": collections
-        }
-    except Exception as e:
-        return {
-            "status": "unhealthy",
-            "database": "disconnected",
-            "error": str(e)
-        }
+    """Health check endpoint"""
+    return {"status": "healthy", "timestamp": datetime.utcnow()}
 
 @app.get("/test/tomtom")
 async def test_tomtom_api(lat: float = 37.9755, lon: float = 23.7348, radius: int = 5000):
