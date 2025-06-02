@@ -439,4 +439,45 @@
     margin-left: 0;
     width: 100%;
   }
+}
+
+.data-source-indicator {
+  margin: 10px 0;
+  text-align: center;
+}
+
+.source-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: white;
+}
+
+.source-badge.local-database {
+  background-color: #28a745;
+}
+
+.source-badge.local-plus-tomtom {
+  background-color: #007bff;
+}
+
+.source-badge.tomtom-only {
+  background-color: #ffc107;
+  color: #000;
+}
+
+.tomtom-addition {
+  color: #007bff;
+  font-weight: 500;
+}
+
+.search-info {
+  background: #f8f9fa;
+  padding: 10px;
+  border-radius: 6px;
+  margin: 10px 0;
+  font-size: 14px;
+  text-align: center;
 } 
