@@ -72,7 +72,7 @@ async def search_nearby_stations_enhanced(
     lon: float = Query(..., description="Longitude"), 
     radius: int = Query(5000, description="Search radius in meters"),
     status: Optional[str] = Query(None, description="Filter by status"),
-    limit: int = Query(50, description="Maximum number of results")
+    limit: int = Query(150, description="Maximum number of results")
 ):
     """
     Enhanced nearby search with TomTom API integration
@@ -92,7 +92,7 @@ async def search_nearby_stations_enhanced(
             limit=limit
         )
         
-        logger.info(f"Found {len(local_stations)} stations in local database")
+        logger.info(f"Found {len(local_stations)} stations in local database within {radius}m")
         
         # Step 2: If insufficient results, call TomTom API
         if len(local_stations) < MIN_STATIONS_THRESHOLD:

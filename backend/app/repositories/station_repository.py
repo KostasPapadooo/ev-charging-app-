@@ -97,7 +97,7 @@ class StationRepository:
         lon: float,
         radius_meters: int = 5000,
         status_filter: Optional[str] = None,
-        limit: int = 50
+        limit: int = 1000
     ) -> List[Dict[str, Any]]:
         """Find stations within radius of coordinates"""
         try:

@@ -352,18 +352,29 @@
   border-radius: 4px;
   background: white;
   font-size: 14px;
-  min-width: 100px;
+  min-width: 120px;
   margin-left: 10px;
 }
 
+.radius-filter:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
 .search-info {
-  background: #d4edda;
-  border: 1px solid #c3e6cb;
-  border-radius: 4px;
+  background: #f8f9fa;
   padding: 10px;
-  margin-bottom: 15px;
-  color: #155724;
+  border-radius: 6px;
+  margin: 10px 0;
+  font-size: 14px;
   text-align: center;
+  border-left: 4px solid #007bff;
+}
+
+.search-info p {
+  margin: 0;
+  color: #495057;
 }
 
 .location-error {
@@ -471,13 +482,4 @@
 .tomtom-addition {
   color: #007bff;
   font-weight: 500;
-}
-
-.search-info {
-  background: #f8f9fa;
-  padding: 10px;
-  border-radius: 6px;
-  margin: 10px 0;
-  font-size: 14px;
-  text-align: center;
 } 

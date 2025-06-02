@@ -52,7 +52,7 @@ export const fetchNearbyStations = async (lat, lon, filters = {}) => {
     if (filters.limit) {
       params.append('limit', filters.limit.toString());
     } else {
-      params.append('limit', '50'); // Default limit
+      params.append('limit', '1000'); // Increased from 50 to 1000
     }
 
     const url = `${API_BASE_URL}/api/stations/nearby/search?${params}`;
@@ -71,7 +71,7 @@ export const fetchNearbyStations = async (lat, lon, filters = {}) => {
     // Return both stations and search params
     return {
       stations: data.stations,
-      searchParams: data.search_params
+      search_params: data.search_params
     };
   } catch (error) {
     console.error('Error fetching nearby stations:', error);

@@ -100,7 +100,9 @@ const StationsMap = ({ userLocation, locationPermission }) => {
   };
 
   const handleRadiusChange = (newRadius) => {
+    console.log(`Changing radius from ${radius}m to ${newRadius}m`);
     setRadius(newRadius);
+    // The useEffect will automatically trigger loadNearbyStations
   };
 
   const getStatusStats = () => {
@@ -155,11 +157,9 @@ const StationsMap = ({ userLocation, locationPermission }) => {
             onChange={(e) => handleRadiusChange(parseInt(e.target.value))}
             className="radius-filter"
           >
+            <option value="500">500m</option>
             <option value="1000">1 km</option>
             <option value="2000">2 km</option>
-            <option value="5000">5 km</option>
-            <option value="10000">10 km</option>
-            <option value="20000">20 km</option>
           </select>
         </div>
 

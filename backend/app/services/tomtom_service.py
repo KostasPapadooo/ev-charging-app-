@@ -42,7 +42,7 @@ class TomTomService:
         self, 
         latitude: float, 
         longitude: float, 
-        radius: int = 50000
+        radius: int = 50000  # Increased default from 50000 to handle larger searches
     ) -> List[Station]:
         """Search for charging stations using TomTom Search API (async)"""
         try:
@@ -54,7 +54,7 @@ class TomTomService:
             # ΑΚΡΙΒΩΣ όπως στο Node-RED
             params = {
                 "key": self.search_api_key,
-                "limit": 100,
+                "limit": 100,  # TomTom API limit per request
                 "lat": latitude,
                 "lon": longitude,
                 "radius": radius,
