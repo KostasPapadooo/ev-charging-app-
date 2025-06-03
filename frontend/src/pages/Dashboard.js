@@ -1,17 +1,26 @@
 // frontend/src/components/Dashboard.js
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import StationsMap from '../components/StationsMap';
 import '../styles/Dashboard.css';
 
 const Dashboard = () => {
-  const { user } = useAuth();
+  const { user, isAuthenticated, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
   const [userLocation, setUserLocation] = useState(null);
   const [locationPermission, setLocationPermission] = useState('prompt');
   const [locationError, setLocationError] = useState(null);
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [stations, setStations] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Redirect to home if not authenticated
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      navigate('/');
+    }
+  }, [isAuthenticated, authLoading, navigate]);
 
   // Fetch stations data
   const fetchStations = useCallback(async (lat, lon) => {
@@ -106,8 +115,11 @@ const Dashboard = () => {
   }, [fetchStations]);
 
   useEffect(() => {
-    getCurrentLocationAndProceed();
-  }, [getCurrentLocationAndProceed]); // Fixed dependencies
+    // Only proceed if user is authenticated
+    if (isAuthenticated && user) {
+      getCurrentLocationAndProceed();
+    }
+  }, [getCurrentLocationAndProceed, isAuthenticated, user]);
 
   const handleLocationRequest = async () => {
     setShowLocationModal(false);
@@ -139,6 +151,24 @@ const Dashboard = () => {
       fetchStations(userLocation.lat, userLocation.lon);
     }
   }, [userLocation, fetchStations]);
+
+  // Show loading state while checking authentication
+  if (authLoading) {
+    return (
+      <div className="dashboard-container">
+        <div className="loading-overlay">
+          <div className="loading-spinner">
+            Loading...
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render anything if not authenticated (will redirect)
+  if (!isAuthenticated || !user) {
+    return null;
+  }
 
   // Show loading state
   if (loading) {

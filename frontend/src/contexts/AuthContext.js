@@ -89,6 +89,9 @@ export const AuthProvider = ({ children }) => {
         setUser(null);
         localStorage.removeItem('token');
         delete axios.defaults.headers.common['Authorization'];
+        
+        // Force a page reload to clear any cached data
+        window.location.href = '/';
     };
 
     const value = {
@@ -98,7 +101,7 @@ export const AuthProvider = ({ children }) => {
         register,
         logout,
         loading,
-        isAuthenticated: !!user
+        isAuthenticated: !!user && !!token
     };
 
     return (

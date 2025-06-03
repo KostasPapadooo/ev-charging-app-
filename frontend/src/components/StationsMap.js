@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import '../styles/StationsMap.css';
 
 // Fix για τα default icons του Leaflet
 delete L.Icon.Default.prototype._getIconUrl;
@@ -154,7 +155,7 @@ const StationsMap = ({ userLocation, locationPermission, stations = [], onRefres
             <option value="500">500m</option>
             <option value="1000">1 km</option>
             <option value="2000">2 km</option>
-            <option value="5000">5 km</option>
+            <option value="3000">3 km</option>
           </select>
         </div>
 
@@ -172,24 +173,6 @@ const StationsMap = ({ userLocation, locationPermission, stations = [], onRefres
           </div>
         </div>
 
-        <div className="stations-stats">
-          <div className="stat">
-            <span className="stat-label">Total:</span>
-            <span className="stat-value">{stats.total}</span>
-          </div>
-          <div className="stat available">
-            <span className="stat-label">Available:</span>
-            <span className="stat-value">{stats.available}</span>
-          </div>
-          <div className="stat busy">
-            <span className="stat-label">Busy:</span>
-            <span className="stat-value">{stats.busy}</span>
-          </div>
-          <div className="stat out-of-order">
-            <span className="stat-label">Out of Order:</span>
-            <span className="stat-value">{stats.outOfOrder}</span>
-          </div>
-        </div>
 
         <button onClick={handleRefresh} className="refresh-button" disabled={loading}>
           {loading ? '🔄 Refreshing...' : '🔄 Refresh'}
