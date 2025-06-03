@@ -1,137 +1,130 @@
 // frontend/src/components/Dashboard.js
-import React, { useState, useEffect } from 'react';
-import StationsMap from '../components/StationsMap';
-import LocationPermissionModal from '../components/LocationPermissionModal';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import '../styles/StationsMap.css';
-import '../styles/LocationPermission.css';
+import StationsMap from '../components/StationsMap';
+import '../styles/Dashboard.css';
 
 const Dashboard = () => {
   const { user } = useAuth();
-  const [showLocationModal, setShowLocationModal] = useState(false);
-  const [locationPermission, setLocationPermission] = useState('prompt'); // 'prompt', 'granted', 'denied'
   const [userLocation, setUserLocation] = useState(null);
-  const [isGettingLocation, setIsGettingLocation] = useState(false);
+  const [locationPermission, setLocationPermission] = useState('prompt');
   const [locationError, setLocationError] = useState(null);
+  const [showLocationModal, setShowLocationModal] = useState(false);
+  const [stations, setStations] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  // Check location permission status when component mounts
-  useEffect(() => {
-    checkLocationPermission();
+  // Fetch stations data
+  const fetchStations = useCallback(async (lat, lon) => {
+    try {
+      setLoading(true);
+      const response = await fetch(
+        `http://localhost:8000/api/stations/nearby/search?lat=${lat}&lon=${lon}&radius=5000&limit=1000`
+      );
+      const data = await response.json();
+      setStations(data.stations || []);
+      setLoading(false);
+    } catch (error) {
+      console.error('Error fetching stations:', error);
+      setStations([]);
+      setLoading(false);
+    }
   }, []);
 
-  const checkLocationPermission = async () => {
-    if (!navigator.geolocation) {
-      setLocationPermission('denied');
-      setLocationError('Geolocation is not supported by this browser');
-      return;
-    }
+  // Get status counts from actual stations data
+  const getStatusCounts = (stations) => {
+    const counts = {
+      total: stations.length,
+      available: 0,
+      busy: 0,
+      outOfOrder: 0,
+      unknown: 0
+    };
 
-    try {
-      // Check if permission API is available
-      if ('permissions' in navigator) {
-        const permission = await navigator.permissions.query({ name: 'geolocation' });
-        
-        console.log('Current permission state:', permission.state);
-        
-        if (permission.state === 'granted') {
-          // Permission already granted, get location immediately
-          await getCurrentLocationAndProceed();
-        } else if (permission.state === 'denied') {
-          setLocationPermission('denied');
-          setLocationError('Location access has been denied. Please enable it in your browser settings.');
-        } else {
-          // Permission is 'prompt' - show modal
-          setLocationPermission('prompt');
-          setShowLocationModal(true);
-        }
-      } else {
-        // Fallback for browsers without permissions API
-        setLocationPermission('prompt');
-        setShowLocationModal(true);
+    stations.forEach(station => {
+      const status = station.status?.toUpperCase();
+      switch (status) {
+        case 'AVAILABLE':
+          counts.available++;
+          break;
+        case 'OCCUPIED':
+        case 'BUSY':
+          counts.busy++;
+          break;
+        case 'OUT_OF_ORDER':
+        case 'OUTOFORDER':
+          counts.outOfOrder++;
+          break;
+        case 'UNKNOWN':
+        default:
+          counts.unknown++;
+          break;
       }
-    } catch (error) {
-      console.error('Error checking location permission:', error);
-      setLocationPermission('prompt');
-      setShowLocationModal(true);
-    }
+    });
+
+    return counts;
   };
 
-  const getCurrentLocationAndProceed = async () => {
-    setIsGettingLocation(true);
-    setLocationError(null);
-    
-    return new Promise((resolve, reject) => {
-      const timeoutId = setTimeout(() => {
-        setIsGettingLocation(false);
-        setLocationPermission('denied');
-        setLocationError('Location request timed out. Please try again.');
-        reject(new Error('Timeout'));
-      }, 15000);
-
+  const getCurrentLocationAndProceed = useCallback(() => {
+    if (navigator.geolocation) {
+      setLocationPermission('requesting');
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          clearTimeout(timeoutId);
           const location = {
             lat: position.coords.latitude,
             lon: position.coords.longitude,
             accuracy: position.coords.accuracy
           };
-          
-          console.log('GPS location obtained:', location);
           setUserLocation(location);
           setLocationPermission('granted');
-          setIsGettingLocation(false);
           setLocationError(null);
-          resolve(location);
+          setShowLocationModal(false);
+          
+          // Fetch stations when location is obtained
+          fetchStations(location.lat, location.lon);
         },
         (error) => {
-          clearTimeout(timeoutId);
           console.error('Geolocation error:', error);
+          setLocationError(`Location error: ${error.message}`);
           setLocationPermission('denied');
-          setIsGettingLocation(false);
           
-          let errorMessage = 'Unable to get your location. ';
-          switch (error.code) {
-            case error.PERMISSION_DENIED:
-              errorMessage += 'Location access was denied. Please enable location access in your browser settings and refresh the page.';
-              break;
-            case error.POSITION_UNAVAILABLE:
-              errorMessage += 'Location information is unavailable. Please check your GPS settings.';
-              break;
-            case error.TIMEOUT:
-              errorMessage += 'Location request timed out. Please try again.';
-              break;
-            default:
-              errorMessage += 'An unknown error occurred.';
-              break;
-          }
-          
-          setLocationError(errorMessage);
-          reject(error);
+          // Use default location (Athens center)
+          const defaultLocation = { lat: 37.9838, lon: 23.7275 };
+          setUserLocation(defaultLocation);
+          fetchStations(defaultLocation.lat, defaultLocation.lon);
         },
-        {
-          enableHighAccuracy: true,
-          timeout: 15000,
-          maximumAge: 300000 // 5 minutes
-        }
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
       );
-    });
-  };
+    } else {
+      setLocationError('Geolocation is not supported by this browser.');
+      setLocationPermission('denied');
+      
+      // Use default location
+      const defaultLocation = { lat: 37.9838, lon: 23.7275 };
+      setUserLocation(defaultLocation);
+      fetchStations(defaultLocation.lat, defaultLocation.lon);
+    }
+  }, [fetchStations]);
+
+  useEffect(() => {
+    getCurrentLocationAndProceed();
+  }, [getCurrentLocationAndProceed]); // Fixed dependencies
 
   const handleLocationRequest = async () => {
-    try {
-      setShowLocationModal(false);
-      await getCurrentLocationAndProceed();
-    } catch (error) {
-      console.error('Failed to get location:', error);
-      // Error handling is done in getCurrentLocationAndProceed
-    }
+    setShowLocationModal(false);
+    await getCurrentLocationAndProceed();
   };
 
-  const handleLocationDenied = () => {
+  const handleLocationDenied = async () => {
     setShowLocationModal(false);
     setLocationPermission('denied');
-    setLocationError('Location access is required to show nearby charging stations. You can still use the app with a default location (Athens center).');
+    
+    // Use default location
+    const defaultLocation = { lat: 37.9838, lng: 23.7275, accuracy: null };
+    setUserLocation(defaultLocation);
+    await fetchStations(defaultLocation.lat, defaultLocation.lng);
+    setLoading(false);
+    
+    setLocationError('Location access denied. Using Athens center as default.');
   };
 
   const handleRetryLocation = () => {
@@ -140,10 +133,37 @@ const Dashboard = () => {
     setShowLocationModal(true);
   };
 
+  // Manual refresh function
+  const handleRefresh = useCallback(() => {
+    if (userLocation) {
+      fetchStations(userLocation.lat, userLocation.lon);
+    }
+  }, [userLocation, fetchStations]);
+
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="dashboard-container">
+        <div className="dashboard-header">
+          <h1>Welcome back, {user?.first_name}!</h1>
+          <p className="dashboard-subtitle">
+            Real-time monitoring of electric vehicle charging stations
+          </p>
+        </div>
+        
+        <div className="loading-overlay">
+          <div className="loading-spinner">
+            Loading stations...
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Show location permission modal
   if (showLocationModal) {
     return (
-      <div className="dashboard">
+      <div className="dashboard-container">
         <div className="dashboard-header">
           <h1>Welcome back, {user?.first_name}!</h1>
           <p className="dashboard-subtitle">
@@ -151,83 +171,16 @@ const Dashboard = () => {
           </p>
         </div>
         
-        <LocationPermissionModal
-          onAllow={handleLocationRequest}
-          onDeny={handleLocationDenied}
-        />
-      </div>
-    );
-  }
-
-  // Show GPS detection loading
-  if (isGettingLocation) {
-    return (
-      <div className="dashboard">
-        <div className="dashboard-header">
-          <h1>Welcome back, {user?.first_name}!</h1>
-          <p className="dashboard-subtitle">
-            Real-time monitoring of electric vehicle charging stations
-          </p>
-        </div>
-        
-        <div className="location-detecting">
-          <div className="location-detecting-spinner"></div>
-          <span className="location-detecting-text">
-            📍 Detecting your GPS location...
-          </span>
-        </div>
-      </div>
-    );
-  }
-
-  // Show error state if location was denied
-  if (locationPermission === 'denied') {
-    return (
-      <div className="dashboard">
-        <div className="dashboard-header">
-          <h1>Welcome back, {user?.first_name}!</h1>
-          <p className="dashboard-subtitle">
-            Real-time monitoring of electric vehicle charging stations
-          </p>
-        </div>
-        
-        <div className="location-error-container">
-          <div className="location-error">
-            <h3>📍 Location Access Required</h3>
-            <p className="error-message">
-              {locationError || 'To show you nearby EV charging stations, we need access to your location.'}
-            </p>
-            
-            <div className="location-instructions">
-              <h4>To enable location access:</h4>
-              <ol>
-                <li>Click the location icon (🔒 or 🌐) in your browser's address bar</li>
-                <li>Select "Allow" for location access</li>
-                <li>Refresh the page or click "Try Again" below</li>
-              </ol>
-              
-              <p className="alternative-note">
-                <strong>Alternative:</strong> You can still use the app with a default location (Athens center), 
-                but you won't see personalized nearby stations.
-              </p>
-            </div>
-            
-            <div className="location-error-actions">
-              <button 
-                onClick={handleRetryLocation}
-                className="retry-location-button primary"
-              >
-                🔄 Try Again
+        <div className="location-modal">
+          <div className="modal-content">
+            <h3>📍 Location Access</h3>
+            <p>We need your location to show nearby charging stations.</p>
+            <div className="modal-buttons">
+              <button onClick={handleLocationRequest} className="btn-primary">
+                Allow Location
               </button>
-              
-              <button 
-                onClick={() => {
-                  setLocationPermission('granted');
-                  setUserLocation({ lat: 37.9755, lon: 23.7348 }); // Athens center
-                }}
-                className="retry-location-button secondary"
-              >
-                📍 Use Default Location (Athens)
+              <button onClick={handleLocationDenied} className="btn-secondary">
+                Use Default Location
               </button>
             </div>
           </div>
@@ -236,28 +189,11 @@ const Dashboard = () => {
     );
   }
 
-  // Only show map when we have user location and permission is granted
-  if (locationPermission === 'granted' && userLocation) {
-    return (
-      <div className="dashboard">
-        <div className="dashboard-header">
-          <h1>Welcome back, {user?.first_name}!</h1>
-          <p className="dashboard-subtitle">
-            Real-time monitoring of electric vehicle charging stations
-          </p>
-        </div>
-        
-        <StationsMap 
-          userLocation={userLocation}
-          locationPermission={locationPermission}
-        />
-      </div>
-    );
-  }
+  // Main dashboard view
+  const statusCounts = getStatusCounts(stations);
 
-  // Fallback loading state
   return (
-    <div className="dashboard">
+    <div className="dashboard-container">
       <div className="dashboard-header">
         <h1>Welcome back, {user?.first_name}!</h1>
         <p className="dashboard-subtitle">
@@ -265,11 +201,44 @@ const Dashboard = () => {
         </p>
       </div>
       
-      <div className="loading-overlay">
-        <div className="loading-spinner">
-          Initializing...
+      {locationError && (
+        <div className="location-error">
+          <span>{locationError}</span>
+          <button onClick={handleRetryLocation} className="retry-btn">
+            Retry
+          </button>
+        </div>
+      )}
+
+      <div className="stats-grid">
+        <div className="stat-card">
+          <h3>Total</h3>
+          <span className="stat-number">{statusCounts.total}</span>
+        </div>
+        <div className="stat-card available">
+          <h3>Available</h3>
+          <span className="stat-number">{statusCounts.available}</span>
+        </div>
+        <div className="stat-card busy">
+          <h3>Busy</h3>
+          <span className="stat-number">{statusCounts.busy}</span>
+        </div>
+        <div className="stat-card out-of-order">
+          <h3>Out of Order</h3>
+          <span className="stat-number">{statusCounts.outOfOrder}</span>
+        </div>
+        <div className="stat-card unknown">
+          <h3>Unknown</h3>
+          <span className="stat-number">{statusCounts.unknown}</span>
         </div>
       </div>
+      
+      <StationsMap 
+        userLocation={userLocation}
+        locationPermission={locationPermission}
+        stations={stations}
+        onRefresh={handleRefresh}
+      />
     </div>
   );
 };

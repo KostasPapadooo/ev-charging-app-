@@ -14,20 +14,15 @@ settings = Settings()
 
 class StationRepository:
     def __init__(self):
-        self.collection_name = "current_stations"
         self.db = None
         self.collection: AsyncIOMotorCollection = None
 
     async def initialize(self):
         """Initialize repository with database connection"""
-        try:
-            self.db = get_database()
-            self.collection = self.db[self.collection_name]
-            await self._create_indexes()
-            logger.info("StationRepository initialized successfully")
-        except Exception as e:
-            logger.error(f"Error initializing StationRepository: {e}")
-            raise
+        self.db = get_database()
+        self.collection = self.db.current_stations
+        await self._create_indexes()
+        logger.info("StationRepository initialized successfully")
 
     async def _create_indexes(self):
         """Create necessary indexes for the stations collection"""
@@ -256,29 +251,25 @@ class StationRepository:
             logger.error(f"Error getting popular search areas: {e}")
             return []
 
-    async def get_all_stations(self, filter_dict: Optional[Dict] = None, limit: Optional[int] = None) -> List[Station]:
-        """Get all stations with optional filtering"""
+    async def get_all_stations(self, limit: int = 100, status_filter: str = None):
+        """
+        Get all stations as raw dictionaries (not Station objects)
+        για χρήση στον scheduler
+        """
         try:
-            query = filter_dict or {}
+            query = {}
+            if status_filter:
+                query["status"] = status_filter
             
-            if limit:
-                cursor = self.collection.find(query).limit(limit)
-            else:
-                cursor = self.collection.find(query)
-                
-            stations_data = await cursor.to_list(length=None)
+            cursor = self.collection.find(query).limit(limit)
+            stations = await cursor.to_list(length=limit)
             
-            # Convert to Station objects
-            stations = []
-            for station_data in stations_data:
-                try:
-                    # Convert MongoDB document to Station object
-                    station = self._convert_to_station_object(station_data)
-                    stations.append(station)
-                except Exception as e:
-                    logger.warning(f"Error converting station {station_data.get('tomtom_id', 'unknown')}: {e}")
-                    continue
-                    
+            # Επιστρέφουμε raw dictionaries
+            for station in stations:
+                if "_id" in station:
+                    station["_id"] = str(station["_id"])
+            
+            logger.info(f"Retrieved {len(stations)} stations as raw data")
             return stations
             
         except Exception as e:
@@ -425,6 +416,30 @@ class StationRepository:
         except Exception as e:
             logger.error(f"Error converting station data to object: {e}")
             raise
+
+    async def get_all(self, limit: int = 100, status_filter: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Get all stations with optional filtering"""
+        try:
+            # Build query
+            query = {}
+            
+            # Add status filter if provided
+            if status_filter:
+                query["status"] = status_filter.upper()
+            
+            # Execute query
+            cursor = self.collection.find(query).limit(limit)
+            stations = await cursor.to_list(length=None)
+            
+            # Convert to JSON-serializable format
+            result = [self._station_to_dict(station) for station in stations]
+            
+            logger.info(f"Retrieved {len(result)} stations from database")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error getting all stations: {e}")
+            return []
 
 # Create singleton instance
 station_repository = StationRepository() 

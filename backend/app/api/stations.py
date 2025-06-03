@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query, Depends
 from typing import List, Optional
 from app.models.station import Station
-from app.repositories.station_repository import station_repository  # Use singleton
+from app.repositories.station_repository import station_repository
 from app.core.config import Settings
 from app.services.tomtom_service import tomtom_service
 from app.core.exceptions import TomTomAPIException
@@ -17,32 +17,23 @@ router = APIRouter(tags=["stations"])
 # Minimum stations threshold - if we have fewer, call TomTom API
 MIN_STATIONS_THRESHOLD = 5
 
-@router.get("/", response_model=List[Station])
+@router.get("/", response_model=List[dict])
 async def get_all_stations(
-    status: Optional[str] = None,  # Remove Query() for direct calls
-    limit: Optional[int] = None    # Remove Query() for direct calls
+    status: Optional[str] = None,
+    limit: Optional[int] = None
 ):
     """
     Get all stations with real-time availability data.
     Updated every 30 minutes by the Batch Layer.
     """
     try:
-        # Build filter
-        filter_dict = {}
-        if status is not None:
-            filter_dict["status"] = status.upper()
-        
-        # Use async call with await
-        stations = await station_repository.get_all_stations(filter_dict=filter_dict, limit=limit)
-        
-        if not stations:
-            return []
-            
-        logger.info(f"Retrieved {len(stations)} stations with filter: {filter_dict}")
+        stations = await station_repository.get_all(
+            limit=limit or 100,
+            status_filter=status
+        )
         return stations
-        
     except Exception as e:
-        logger.error(f"Error retrieving stations: {str(e)}")
+        logger.error(f"Error getting all stations: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.get("/{station_id}", response_model=Station)
@@ -236,4 +227,59 @@ async def get_stations_summary():
         
     except Exception as e:
         logger.error(f"Error getting stations summary: {str(e)}")
-        raise HTTPException(status_code=500, detail="Internal server error") 
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@router.post("/update-availability")
+async def manual_update_availability():
+    """Manual trigger για ενημέρωση availability όλων των σταθμών"""
+    try:
+        from app.services.tomtom_service import tomtom_service
+        
+        # Χρησιμοποιούμε το get_all() αντί για get_all_stations()
+        all_stations = await station_repository.get_all(limit=10)
+        logger.info(f"🔄 Manual update started for {len(all_stations)} stations")
+        
+        updated_count = 0
+        status_changes = []
+        
+        for station in all_stations:
+            try:
+                lat = station["location"]["coordinates"][1]
+                lon = station["location"]["coordinates"][0]
+                
+                # Καλούμε το TomTom API
+                fresh_stations = await tomtom_service.get_stations_in_area(lat, lon, 1000)
+                
+                for fresh_station in fresh_stations:
+                    if fresh_station.tomtom_id == station["tomtom_id"]:
+                        old_status = station.get("status", "UNKNOWN")
+                        new_status = fresh_station.status
+                        
+                        if new_status != old_status:
+                            await station_repository.update_station_status(
+                                station["tomtom_id"],
+                                new_status
+                            )
+                            updated_count += 1
+                            status_changes.append({
+                                "station_name": station["name"],
+                                "tomtom_id": station["tomtom_id"],
+                                "old_status": old_status,
+                                "new_status": new_status
+                            })
+                        break
+                        
+            except Exception as e:
+                logger.error(f"❌ Error updating station {station.get('name')}: {e}")
+                continue
+        
+        return {
+            "success": True,
+            "message": f"Updated {updated_count} stations",
+            "total_checked": len(all_stations),
+            "changes": status_changes
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Manual update failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
-import { fetchNearbyStations } from '../services/stationsApi';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -34,69 +33,64 @@ const createUserIcon = () => {
 };
 
 const getMarkerColor = (status) => {
-  switch (status) {
-    case 'AVAILABLE': return '#28a745';
-    case 'BUSY': return '#dc3545';
-    case 'OUT_OF_ORDER': return '#6c757d';
-    default: return '#007bff';
+  switch (status?.toUpperCase()) {
+    case 'AVAILABLE':
+      return 'green';
+    case 'OCCUPIED':
+    case 'BUSY':
+      return 'red';
+    case 'OUT_OF_ORDER':
+    case 'OUTOFORDER':
+      return 'gray';
+    case 'UNKNOWN':
+    default:
+      return 'orange';
   }
 };
 
-const StationsMap = ({ userLocation, locationPermission }) => {
-  const [stations, setStations] = useState([]);
-  const [loading, setLoading] = useState(true);
+const StationsMap = ({ userLocation, locationPermission, stations = [], onRefresh }) => {
+  const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState('');
-  const [error, setError] = useState(null);
-  const [searchParams, setSearchParams] = useState(null);
-  const [radius, setRadius] = useState(5000);
+  const [radius, setRadius] = useState(5000); // Επαναφορά του radius state
 
-  // Load stations when component mounts or when filters change
-  useEffect(() => {
-    if (userLocation && locationPermission === 'granted') {
-      loadNearbyStations(userLocation.lat, userLocation.lon);
-    }
-  }, [userLocation, locationPermission, filter, radius]);
-
-  // Auto-refresh every 30 seconds
-  useEffect(() => {
-    if (userLocation && locationPermission === 'granted') {
-      const interval = setInterval(() => {
-        loadNearbyStations(userLocation.lat, userLocation.lon);
-      }, 30000);
-
-      return () => clearInterval(interval);
-    }
-  }, [userLocation, locationPermission, filter, radius]);
-
-  const loadNearbyStations = async (lat, lon) => {
+  const loadNearbyStations = useCallback(async (lat, lon) => {
+    if (!lat || !lon) return;
+    
     try {
       setLoading(true);
-      setError(null);
-      
-      const filters = {
-        radius: radius,
-        ...(filter && { status: filter })
-      };
-      
-      console.log(`Loading stations near (${lat}, ${lon}) with radius ${radius}m`);
-      const data = await fetchNearbyStations(lat, lon, filters);
-      
-      setStations(data.stations);
-      setSearchParams(data.search_params);
-      
-      console.log(`Loaded ${data.stations.length} nearby stations`);
-    } catch (error) {
-      console.error('Failed to load nearby stations:', error);
-      setError('Failed to load nearby stations. Please try again.');
-    } finally {
+      // Just set loading to false since stations come from props
       setLoading(false);
+    } catch (err) {
+      console.error('Error loading stations:', err);
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (userLocation?.lat && userLocation?.lon) {
+      loadNearbyStations(userLocation.lat, userLocation.lon);
+    }
+  }, [userLocation, loadNearbyStations]);
+
+  useEffect(() => {
+    if (userLocation?.lat && userLocation?.lon && filter) {
+      loadNearbyStations(userLocation.lat, userLocation.lon);
+    }
+  }, [filter, userLocation, loadNearbyStations]);
+
+  const filteredStations = stations.filter(station => {
+    if (!filter) return true;
+    return station.status?.toLowerCase() === filter.toLowerCase();
+  });
+
+  const handleRefresh = () => {
+    if (onRefresh) {
+      onRefresh();
     }
   };
 
-  const handleRefresh = () => {
-    if (userLocation) {
-      loadNearbyStations(userLocation.lat, userLocation.lon);
-    }
+  const handleFilterChange = (newFilter) => {
+    setFilter(newFilter);
   };
 
   const handleRadiusChange = (newRadius) => {
@@ -105,13 +99,14 @@ const StationsMap = ({ userLocation, locationPermission }) => {
     // The useEffect will automatically trigger loadNearbyStations
   };
 
+  // Calculate stats for filtered stations
   const getStatusStats = () => {
     return {
-      total: stations.length,
-      available: stations.filter(s => s.status === 'AVAILABLE').length,
-      busy: stations.filter(s => s.status === 'BUSY').length,
-      outOfOrder: stations.filter(s => s.status === 'OUT_OF_ORDER').length,
-      unknown: stations.filter(s => s.status === 'UNKNOWN').length
+      total: filteredStations.length,
+      available: filteredStations.filter(s => s.status?.toUpperCase() === 'AVAILABLE').length,
+      busy: filteredStations.filter(s => ['OCCUPIED', 'BUSY'].includes(s.status?.toUpperCase())).length,
+      outOfOrder: filteredStations.filter(s => ['OUT_OF_ORDER', 'OUTOFORDER'].includes(s.status?.toUpperCase())).length,
+      unknown: filteredStations.filter(s => !s.status || s.status?.toUpperCase() === 'UNKNOWN').length
     };
   };
 
@@ -122,13 +117,12 @@ const StationsMap = ({ userLocation, locationPermission }) => {
     return null;
   }
 
-  if (error) {
+  if (!userLocation) {
     return (
-      <div className="error-container">
-        <p className="error-message">{error}</p>
-        <button onClick={handleRefresh} className="retry-button">
-          Retry
-        </button>
+      <div className="map-container">
+        <div className="loading-message">
+          Getting your location...
+        </div>
       </div>
     );
   }
@@ -138,15 +132,15 @@ const StationsMap = ({ userLocation, locationPermission }) => {
       <div className="map-controls">
         <div className="filter-section">
           <label htmlFor="status-filter">Filter by Status:</label>
-          <select
+          <select 
             id="status-filter"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
+            value={filter} 
+            onChange={(e) => handleFilterChange(e.target.value)}
             className="status-filter"
           >
             <option value="">All Stations</option>
             <option value="AVAILABLE">Available</option>
-            <option value="BUSY">Busy</option>
+            <option value="OCCUPIED">Busy</option>
             <option value="OUT_OF_ORDER">Out of Order</option>
           </select>
           
@@ -160,6 +154,7 @@ const StationsMap = ({ userLocation, locationPermission }) => {
             <option value="500">500m</option>
             <option value="1000">1 km</option>
             <option value="2000">2 km</option>
+            <option value="5000">5 km</option>
           </select>
         </div>
 
@@ -182,33 +177,24 @@ const StationsMap = ({ userLocation, locationPermission }) => {
             <span className="stat-label">Total:</span>
             <span className="stat-value">{stats.total}</span>
           </div>
-          <div className="stat">
+          <div className="stat available">
             <span className="stat-label">Available:</span>
-            <span className="stat-value available">{stats.available}</span>
+            <span className="stat-value">{stats.available}</span>
           </div>
-          <div className="stat">
+          <div className="stat busy">
             <span className="stat-label">Busy:</span>
-            <span className="stat-value busy">{stats.busy}</span>
+            <span className="stat-value">{stats.busy}</span>
           </div>
-          <div className="stat">
+          <div className="stat out-of-order">
             <span className="stat-label">Out of Order:</span>
-            <span className="stat-value out-of-order">{stats.outOfOrder}</span>
+            <span className="stat-value">{stats.outOfOrder}</span>
           </div>
         </div>
 
         <button onClick={handleRefresh} className="refresh-button" disabled={loading}>
-          {loading ? '⏳ Loading...' : '🔄 Refresh'}
+          {loading ? '🔄 Refreshing...' : '🔄 Refresh'}
         </button>
       </div>
-
-      {searchParams && (
-        <div className="search-info">
-          <p>
-            Showing {searchParams.total_found} stations within {(searchParams.radius_meters / 1000).toFixed(1)}km 
-            {searchParams.status_filter && ` (${searchParams.status_filter} only)`}
-          </p>
-        </div>
-      )}
 
       <div className="map-wrapper">
         {loading && (
@@ -260,7 +246,7 @@ const StationsMap = ({ userLocation, locationPermission }) => {
           />
           
           {/* Station markers */}
-          {stations.map((station) => (
+          {filteredStations.map((station) => (
             <Marker
               key={station.tomtom_id}
               position={[
@@ -275,22 +261,26 @@ const StationsMap = ({ userLocation, locationPermission }) => {
                   <p className="station-address">{station.address}</p>
                   
                   <div className="station-status">
-                    <span className={`status-badge ${station.status.toLowerCase()}`}>
-                      {station.status}
+                    <span className={`status-badge ${station.status?.toLowerCase()}`}>
+                      {station.status || 'Unknown'}
                     </span>
                   </div>
 
                   <div className="connectors-info">
                     <h5>Connectors:</h5>
-                    {station.connectors.map((connector, index) => (
-                      <div key={index} className="connector">
-                        <span className="connector-type">{connector.type}</span>
-                        <span className="connector-power">{connector.max_power_kw}kW</span>
-                        <span className={`connector-status ${connector.status.toLowerCase()}`}>
-                          {connector.status}
-                        </span>
-                      </div>
-                    ))}
+                    {station.connectors && station.connectors.length > 0 ? (
+                      station.connectors.map((connector, index) => (
+                        <div key={index} className="connector">
+                          <span className="connector-type">{connector.type}</span>
+                          <span className="connector-power">{connector.power_kw}kW</span>
+                          <span className={`connector-status ${connector.status?.toLowerCase()}`}>
+                            {connector.status || 'Unknown'}
+                          </span>
+                        </div>
+                      ))
+                    ) : (
+                      <p>No connector information available</p>
+                    )}
                   </div>
 
                   {station.operator && (
@@ -324,10 +314,10 @@ const StationsMap = ({ userLocation, locationPermission }) => {
                   <div className="station-meta">
                     <p className="last-updated">
                       <strong>Last Updated:</strong> {' '}
-                      {new Date(station.last_updated).toLocaleString()}
+                      {station.last_updated ? new Date(station.last_updated).toLocaleString() : 'N/A'}
                     </p>
                     <p className="data-source">
-                      <strong>Source:</strong> {station.data_source}
+                      <strong>Source:</strong> {station.data_source || 'TomTom'}
                     </p>
                   </div>
                 </div>

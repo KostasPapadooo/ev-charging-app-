@@ -5,6 +5,8 @@ import logging
 import time
 from datetime import datetime
 from contextlib import asynccontextmanager
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.interval import IntervalTrigger
 
 from app.core.config import settings
 from app.database.connection import connect_to_mongo, close_mongo_connection
@@ -21,6 +23,54 @@ from app.api.auth import router as auth_router
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Global scheduler
+scheduler = AsyncIOScheduler()
+
+async def update_stations_availability():
+    """Ενημερώνει τη διαθεσιμότητα όλων των σταθμών"""
+    try:
+        from app.repositories.station_repository import station_repository
+        from app.services.tomtom_service import tomtom_service
+        
+        # Παίρνουμε όλους τους σταθμούς από τη βάση
+        stations = await station_repository.get_all_stations()
+        
+        logger.info(f"🔄 Starting availability update for {len(stations)} stations")
+        
+        updated_count = 0
+        for station in stations[:5]:  # Πρώτα 5 για τεστ
+            try:
+                # Καλούμε το TomTom API για fresh data
+                lat = station["location"]["coordinates"][1]
+                lon = station["location"]["coordinates"][0]
+                
+                fresh_stations = await tomtom_service.get_stations_in_area(lat, lon, 1000)
+                
+                # Βρίσκουμε τον αντίστοιχο σταθμό
+                for fresh_station in fresh_stations:
+                    if fresh_station.tomtom_id == station["tomtom_id"]:
+                        # Ενημερώνουμε το status μόνο αν άλλαξε
+                        old_status = station.get("status", "UNKNOWN")
+                        new_status = fresh_station.status
+                        
+                        if new_status != old_status:
+                            await station_repository.update_station_status(
+                                station["tomtom_id"],
+                                new_status
+                            )
+                            updated_count += 1
+                            logger.info(f"📍 Updated {station['name']}: {old_status} → {new_status}")
+                        break
+                        
+            except Exception as e:
+                logger.error(f"❌ Error updating station {station.get('tomtom_id')}: {e}")
+                continue
+        
+        logger.info(f"✅ Updated availability for {updated_count} stations")
+        
+    except Exception as e:
+        logger.error(f"❌ Error updating stations availability: {e}")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
@@ -28,9 +78,32 @@ async def lifespan(app: FastAPI):
     # Αρχικοποίηση των repositories μετά τη σύνδεση στη βάση δεδομένων
     from app.repositories import init_repositories
     await init_repositories()  # Make it async
-    logger.info("Application startup complete")
+    
+    # Ξεκινάμε τον scheduler ΜΕΤΑ την αρχικοποίηση
+    try:
+        scheduler.add_job(
+            update_stations_availability,
+            IntervalTrigger(minutes=5),
+            id="update_availability"
+        )
+        scheduler.start()
+        logger.info("🚀 Availability update scheduler started - updates every 5 minutes")
+        
+        # Τρέχουμε μια φορά αμέσως για να δούμε αποτελέσματα
+        logger.info("🔄 Running initial availability update...")
+        await update_stations_availability()
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to start scheduler: {e}")
+    
+    logger.info("✅ Application startup complete")
     yield
     # Shutdown
+    try:
+        scheduler.shutdown()
+        logger.info("🛑 Scheduler stopped")
+    except:
+        pass
     await close_mongo_connection()
     await tomtom_service.close()
     logger.info("Application shutdown complete")
