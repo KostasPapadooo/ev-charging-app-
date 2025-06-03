@@ -14,6 +14,7 @@ const Dashboard = () => {
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [stations, setStations] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [currentRadius, setCurrentRadius] = useState(500); // Αρχική ακτίνα 500m
 
   // Redirect to home if not authenticated
   useEffect(() => {
@@ -22,15 +23,20 @@ const Dashboard = () => {
     }
   }, [isAuthenticated, authLoading, navigate]);
 
-  // Fetch stations data
-  const fetchStations = useCallback(async (lat, lon) => {
+  // Fetch stations data with specific radius
+  const fetchStations = useCallback(async (lat, lon, radius = 500) => {
     try {
       setLoading(true);
+      console.log(`Fetching stations within ${radius}m radius from (${lat}, ${lon})`);
+      
       const response = await fetch(
-        `http://localhost:8000/api/stations/nearby/search?lat=${lat}&lon=${lon}&radius=5000&limit=1000`
+        `http://localhost:8000/api/stations/nearby/search?lat=${lat}&lon=${lon}&radius=${radius}&limit=1000`
       );
       const data = await response.json();
+      
+      console.log(`Found ${data.stations?.length || 0} stations within ${radius}m`);
       setStations(data.stations || []);
+      setCurrentRadius(radius);
       setLoading(false);
     } catch (error) {
       console.error('Error fetching stations:', error);
@@ -88,8 +94,8 @@ const Dashboard = () => {
           setLocationError(null);
           setShowLocationModal(false);
           
-          // Fetch stations when location is obtained
-          fetchStations(location.lat, location.lon);
+          // Fetch stations with initial 500m radius
+          fetchStations(location.lat, location.lon, 500);
         },
         (error) => {
           console.error('Geolocation error:', error);
@@ -99,7 +105,7 @@ const Dashboard = () => {
           // Use default location (Athens center)
           const defaultLocation = { lat: 37.9838, lon: 23.7275 };
           setUserLocation(defaultLocation);
-          fetchStations(defaultLocation.lat, defaultLocation.lon);
+          fetchStations(defaultLocation.lat, defaultLocation.lon, 500);
         },
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
       );
@@ -110,7 +116,7 @@ const Dashboard = () => {
       // Use default location
       const defaultLocation = { lat: 37.9838, lon: 23.7275 };
       setUserLocation(defaultLocation);
-      fetchStations(defaultLocation.lat, defaultLocation.lon);
+      fetchStations(defaultLocation.lat, defaultLocation.lon, 500);
     }
   }, [fetchStations]);
 
@@ -131,9 +137,9 @@ const Dashboard = () => {
     setLocationPermission('denied');
     
     // Use default location
-    const defaultLocation = { lat: 37.9838, lng: 23.7275, accuracy: null };
+    const defaultLocation = { lat: 37.9838, lon: 23.7275, accuracy: null };
     setUserLocation(defaultLocation);
-    await fetchStations(defaultLocation.lat, defaultLocation.lng);
+    await fetchStations(defaultLocation.lat, defaultLocation.lon, 500);
     setLoading(false);
     
     setLocationError('Location access denied. Using Athens center as default.');
@@ -145,10 +151,20 @@ const Dashboard = () => {
     setShowLocationModal(true);
   };
 
-  // Manual refresh function
-  const handleRefresh = useCallback(() => {
+  // Manual refresh function with radius parameter
+  const handleRefresh = useCallback((newRadius) => {
     if (userLocation) {
-      fetchStations(userLocation.lat, userLocation.lon);
+      const radiusToUse = newRadius || currentRadius;
+      console.log(`Refreshing with radius: ${radiusToUse}m`);
+      fetchStations(userLocation.lat, userLocation.lon, radiusToUse);
+    }
+  }, [userLocation, currentRadius, fetchStations]);
+
+  // Handle radius change from StationsMap
+  const handleRadiusChange = useCallback((newRadius) => {
+    console.log(`Dashboard: Radius changed to ${newRadius}m`);
+    if (userLocation) {
+      fetchStations(userLocation.lat, userLocation.lon, newRadius);
     }
   }, [userLocation, fetchStations]);
 
@@ -183,7 +199,7 @@ const Dashboard = () => {
         
         <div className="loading-overlay">
           <div className="loading-spinner">
-            Loading stations...
+            Loading stations ...
           </div>
         </div>
       </div>
@@ -240,6 +256,11 @@ const Dashboard = () => {
         </div>
       )}
 
+      {/* Search radius info */}
+      <div className="search-radius-info">
+        <p>Showing stations within <strong>{currentRadius}m</strong> from your location</p>
+      </div>
+
       <div className="stats-grid">
         <div className="stat-card">
           <h3>Total</h3>
@@ -267,7 +288,9 @@ const Dashboard = () => {
         userLocation={userLocation}
         locationPermission={locationPermission}
         stations={stations}
+        currentRadius={currentRadius}
         onRefresh={handleRefresh}
+        onRadiusChange={handleRadiusChange}
       />
     </div>
   );

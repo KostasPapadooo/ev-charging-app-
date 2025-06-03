@@ -4,7 +4,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import '../styles/StationsMap.css';
 
-// Fix για τα default icons του Leaflet
+// Fix for default markers
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: require('leaflet/dist/images/marker-icon-2x.png'),
@@ -12,12 +12,38 @@ L.Icon.Default.mergeOptions({
   shadowUrl: require('leaflet/dist/images/marker-shadow.png'),
 });
 
-// Custom icons για διαφορετικά status
+// Custom icons for different station statuses
 const createCustomIcon = (status) => {
-  const color = getMarkerColor(status);
+  let color = '#6c757d'; // default gray
+  
+  switch (status?.toUpperCase()) {
+    case 'AVAILABLE':
+      color = '#28a745'; // green
+      break;
+    case 'OCCUPIED':
+    case 'BUSY':
+      color = '#dc3545'; // red
+      break;
+    case 'OUT_OF_ORDER':
+    case 'OUTOFORDER':
+      color = '#6c757d'; // gray
+      break;
+    case 'UNKNOWN':
+    default:
+      color = '#ffc107'; // yellow
+      break;
+  }
+
   return L.divIcon({
     className: 'custom-marker',
-    html: `<div style="background-color: ${color}; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>`,
+    html: `<div style="
+      background-color: ${color};
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      border: 3px solid white;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    "></div>`,
     iconSize: [20, 20],
     iconAnchor: [10, 10]
   });
@@ -33,26 +59,22 @@ const createUserIcon = () => {
   });
 };
 
-const getMarkerColor = (status) => {
-  switch (status?.toUpperCase()) {
-    case 'AVAILABLE':
-      return 'green';
-    case 'OCCUPIED':
-    case 'BUSY':
-      return 'red';
-    case 'OUT_OF_ORDER':
-    case 'OUTOFORDER':
-      return 'gray';
-    case 'UNKNOWN':
-    default:
-      return 'orange';
-  }
-};
-
-const StationsMap = ({ userLocation, locationPermission, stations = [], onRefresh }) => {
+const StationsMap = ({ 
+  userLocation, 
+  locationPermission, 
+  stations = [], 
+  currentRadius = 500,
+  onRefresh, 
+  onRadiusChange 
+}) => {
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState('');
-  const [radius, setRadius] = useState(5000); // Επαναφορά του radius state
+  const [radius, setRadius] = useState(currentRadius);
+
+  // Update local radius when currentRadius prop changes
+  useEffect(() => {
+    setRadius(currentRadius);
+  }, [currentRadius]);
 
   const loadNearbyStations = useCallback(async (lat, lon) => {
     if (!lat || !lon) return;
@@ -85,8 +107,9 @@ const StationsMap = ({ userLocation, locationPermission, stations = [], onRefres
   });
 
   const handleRefresh = () => {
+    console.log(`StationsMap: Refreshing with current radius ${radius}m`);
     if (onRefresh) {
-      onRefresh();
+      onRefresh(radius);
     }
   };
 
@@ -95,34 +118,60 @@ const StationsMap = ({ userLocation, locationPermission, stations = [], onRefres
   };
 
   const handleRadiusChange = (newRadius) => {
-    console.log(`Changing radius from ${radius}m to ${newRadius}m`);
+    console.log(`StationsMap: Radius changed from ${radius}m to ${newRadius}m`);
     setRadius(newRadius);
-    // The useEffect will automatically trigger loadNearbyStations
+    if (onRadiusChange) {
+      onRadiusChange(newRadius);
+    }
   };
 
-  // Calculate stats for filtered stations
-  const getStatusStats = () => {
-    return {
-      total: filteredStations.length,
-      available: filteredStations.filter(s => s.status?.toUpperCase() === 'AVAILABLE').length,
-      busy: filteredStations.filter(s => ['OCCUPIED', 'BUSY'].includes(s.status?.toUpperCase())).length,
-      outOfOrder: filteredStations.filter(s => ['OUT_OF_ORDER', 'OUTOFORDER'].includes(s.status?.toUpperCase())).length,
-      unknown: filteredStations.filter(s => !s.status || s.status?.toUpperCase() === 'UNKNOWN').length
+  // Get status counts for the current filtered stations
+  const getStatusCounts = (stations) => {
+    const counts = {
+      total: stations.length,
+      available: 0,
+      busy: 0,
+      outOfOrder: 0,
+      unknown: 0
     };
+
+    stations.forEach(station => {
+      const status = station.status?.toUpperCase();
+      switch (status) {
+        case 'AVAILABLE':
+          counts.available++;
+          break;
+        case 'OCCUPIED':
+        case 'BUSY':
+          counts.busy++;
+          break;
+        case 'OUT_OF_ORDER':
+        case 'OUTOFORDER':
+          counts.outOfOrder++;
+          break;
+        case 'UNKNOWN':
+        default:
+          counts.unknown++;
+          break;
+      }
+    });
+
+    return counts;
   };
 
-  const stats = getStatusStats();
-
-  // Don't render anything if we don't have user location
-  if (!userLocation || locationPermission !== 'granted') {
-    return null;
-  }
+  const statusCounts = getStatusCounts(filteredStations);
 
   if (!userLocation) {
     return (
-      <div className="map-container">
-        <div className="loading-message">
-          Getting your location...
+      <div className="stations-map-container">
+        <div className="location-error">
+          <h3>Location Required</h3>
+          <p>Please allow location access to view nearby charging stations.</p>
+          <ol>
+            <li>Click the location icon in your browser's address bar</li>
+            <li>Select "Allow" for location access</li>
+            <li>Refresh the page</li>
+          </ol>
         </div>
       </div>
     );
@@ -130,40 +179,13 @@ const StationsMap = ({ userLocation, locationPermission, stations = [], onRefres
 
   return (
     <div className="stations-map-container">
+      {/* Map Controls */}
       <div className="map-controls">
-        <div className="filter-section">
-          <label htmlFor="status-filter">Filter by Status:</label>
-          <select 
-            id="status-filter"
-            value={filter} 
-            onChange={(e) => handleFilterChange(e.target.value)}
-            className="status-filter"
-          >
-            <option value="">All Stations</option>
-            <option value="AVAILABLE">Available</option>
-            <option value="OCCUPIED">Busy</option>
-            <option value="OUT_OF_ORDER">Out of Order</option>
-          </select>
-          
-          <label htmlFor="radius-filter">Search Radius:</label>
-          <select
-            id="radius-filter"
-            value={radius}
-            onChange={(e) => handleRadiusChange(parseInt(e.target.value))}
-            className="radius-filter"
-          >
-            <option value="500">500m</option>
-            <option value="1000">1 km</option>
-            <option value="2000">2 km</option>
-            <option value="3000">3 km</option>
-          </select>
-        </div>
-
         <div className="location-info">
           <div className="current-location">
-            <span className="location-icon">📍</span>
+            <span className="location-icon">📍Your Location</span>
             <span>
-              Your Location: {userLocation.lat.toFixed(4)}, {userLocation.lon.toFixed(4)}
+              {userLocation.lat.toFixed(4)}, {userLocation.lon.toFixed(4)}
             </span>
             {userLocation.accuracy && (
               <span className="accuracy">
@@ -171,42 +193,92 @@ const StationsMap = ({ userLocation, locationPermission, stations = [], onRefres
               </span>
             )}
           </div>
+          
+          <div className="filter-section">
+            <select 
+              className="radius-filter"
+              value={radius}
+              onChange={(e) => handleRadiusChange(parseInt(e.target.value))}
+            >
+              <option value={500}>500m radius</option>
+              <option value={1000}>1km radius</option>
+              <option value={2000}>2km radius</option>
+              <option value={3000}>3km radius</option>
+            </select>
+            
+          
+          </div>
         </div>
 
-
-        <button onClick={handleRefresh} className="refresh-button" disabled={loading}>
-          {loading ? '🔄 Refreshing...' : '🔄 Refresh'}
-        </button>
+        {/* Status Filter */}
+        <div className="status-filters">
+          <button 
+            className={`filter-btn ${filter === '' ? 'active' : ''}`}
+            onClick={() => handleFilterChange('')}
+          >
+            All ({statusCounts.total})
+          </button>
+          <button 
+            className={`filter-btn available ${filter === 'available' ? 'active' : ''}`}
+            onClick={() => handleFilterChange('available')}
+          >
+            Available ({statusCounts.available})
+          </button>
+          <button 
+            className={`filter-btn busy ${filter === 'busy' ? 'active' : ''}`}
+            onClick={() => handleFilterChange('busy')}
+          >
+            Busy ({statusCounts.busy})
+          </button>
+          <button 
+            className={`filter-btn out-of-order ${filter === 'out_of_order' ? 'active' : ''}`}
+            onClick={() => handleFilterChange('out_of_order')}
+          >
+            Out of Order ({statusCounts.outOfOrder})
+          </button>
+          <button 
+            className={`filter-btn unknown ${filter === 'unknown' ? 'active' : ''}`}
+            onClick={() => handleFilterChange('unknown')}
+          >
+            Unknown ({statusCounts.unknown})
+          </button>
+        </div>
       </div>
 
+      {/* Search Info */}
+      <div className="search-info">
+        <p>
+          Showing {filteredStations.length} stations within {radius}m 
+          {filter && ` (filtered by: ${filter})`}
+        </p>
+      </div>
+
+      {/* Map */}
       <div className="map-wrapper">
         {loading && (
           <div className="loading-overlay">
             <div className="loading-spinner">
-              Loading nearby stations...
+              Loading stations...
             </div>
           </div>
         )}
         
         <MapContainer
           center={[userLocation.lat, userLocation.lon]}
-          zoom={13}
-          style={{ height: '600px', width: '100%' }}
+          zoom={radius <= 500 ? 16 : radius <= 1000 ? 15 : radius <= 2000 ? 14 : radius <= 5000 ? 13 : 12}
           className="stations-map"
+          style={{ height: '500px', width: '100%' }}
         >
           <TileLayer
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
           
           {/* User location marker */}
-          <Marker
-            position={[userLocation.lat, userLocation.lon]}
-            icon={createUserIcon()}
-          >
+          <Marker position={[userLocation.lat, userLocation.lon]}>
             <Popup>
               <div className="user-location-popup">
-                <h4>📍 Your Location</h4>
+                <h4>Your Location</h4>
                 <p>Lat: {userLocation.lat.toFixed(6)}</p>
                 <p>Lon: {userLocation.lon.toFixed(6)}</p>
                 {userLocation.accuracy && (
@@ -268,40 +340,17 @@ const StationsMap = ({ userLocation, locationPermission, stations = [], onRefres
 
                   {station.operator && (
                     <div className="operator-info">
-                      <h5>Operator:</h5>
-                      <p>{station.operator.name}</p>
-                      {station.operator.phone && (
-                        <p>📞 {station.operator.phone}</p>
-                      )}
-                      {station.operator.website && (
-                        <p>
-                          <a href={station.operator.website} target="_blank" rel="noopener noreferrer">
-                            🌐 Website
-                          </a>
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  {station.amenities && station.amenities.length > 0 && (
-                    <div className="amenities">
-                      <h5>Amenities:</h5>
-                      <div className="amenity-tags">
-                        {station.amenities.map((amenity, index) => (
-                          <span key={index} className="amenity-tag">{amenity}</span>
-                        ))}
-                      </div>
+                      <p><strong>Operator:</strong> {station.operator.name}</p>
                     </div>
                   )}
 
                   <div className="station-meta">
-                    <p className="last-updated">
-                      <strong>Last Updated:</strong> {' '}
-                      {station.last_updated ? new Date(station.last_updated).toLocaleString() : 'N/A'}
-                    </p>
-                    <p className="data-source">
-                      <strong>Source:</strong> {station.data_source || 'TomTom'}
-                    </p>
+                    <p>Distance: ~{Math.round(station.distance || 0)}m</p>
+                    {station.last_updated && (
+                      <p className="last-updated">
+                        Updated: {new Date(station.last_updated).toLocaleString()}
+                      </p>
+                    )}
                   </div>
                 </div>
               </Popup>
