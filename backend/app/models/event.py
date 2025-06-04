@@ -24,6 +24,17 @@ class Event(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     
+    @classmethod
+    def __get_validators__(cls):
+        yield from super().__get_validators__()
+        yield cls.ensure_connector_id_string
+
+    @staticmethod
+    def ensure_connector_id_string(values):
+        if "connector_id" in values and values["connector_id"] is None:
+            values["connector_id"] = ""
+        return values
+
     class Config:
         populate_by_name = True
         arbitrary_types_allowed = True

@@ -79,14 +79,19 @@ class EventRepository(BaseRepository[Event]):
         station_id: str,
         old_status: str,
         new_status: str,
+        connector_id: str = "",
         **kwargs
     ) -> Event:
         """Create a station status change event"""
+        # Always ensure connector_id is a string
+        if connector_id is None:
+            connector_id = ""
         event = Event(
             event_type="STATION_STATUS_CHANGE",
             station_id=station_id,
             old_status=old_status,
             new_status=new_status,
+            connector_id=connector_id,
             **kwargs
         )
         return await self.create(event)

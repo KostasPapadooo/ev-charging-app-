@@ -1,9 +1,11 @@
 // frontend/src/components/Dashboard.js
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import StationsMap from '../components/StationsMap';
 import '../styles/Dashboard.css';
+
+const AUTO_REFRESH_INTERVAL = 5000; // ms (5 seconds)
 
 const Dashboard = () => {
   const { user, isAuthenticated, loading: authLoading } = useAuth();
@@ -15,6 +17,7 @@ const Dashboard = () => {
   const [stations, setStations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentRadius, setCurrentRadius] = useState(500); // Αρχική ακτίνα 500m
+  const intervalRef = useRef(null);
 
   // Redirect to home if not authenticated
   useEffect(() => {
@@ -167,6 +170,28 @@ const Dashboard = () => {
       fetchStations(userLocation.lat, userLocation.lon, newRadius);
     }
   }, [userLocation, fetchStations]);
+
+  // Auto-refresh effect
+  useEffect(() => {
+    if (!userLocation) return;
+
+    // Clear any previous interval
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+    }
+
+    // Set up new interval
+    intervalRef.current = setInterval(() => {
+      fetchStations(userLocation.lat, userLocation.lon, currentRadius);
+    }, AUTO_REFRESH_INTERVAL);
+
+    // Cleanup on unmount or when dependencies change
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, [userLocation, currentRadius, fetchStations]);
 
   // Show loading state while checking authentication
   if (authLoading) {

@@ -100,7 +100,7 @@ async def _async_batch_update(latitude: float, longitude: float, radius: int, ci
                                 "last_updated": datetime.utcnow(),
                                 "data_source": "TOMTOM"
                             }
-                        )
+                    )
                         updated_count += 1
                         # Save historical data
                         historical_data = {
@@ -118,7 +118,7 @@ async def _async_batch_update(latitude: float, longitude: float, radius: int, ci
                 else:
                     # Insert new station
                     await station_repository.create_station(station)
-                        inserted_count += 1
+                    inserted_count += 1
                     # Save initial historical data
                     historical_data = {
                         "station_id": station.tomtom_id,
