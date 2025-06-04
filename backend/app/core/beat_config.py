@@ -52,6 +52,12 @@ beat_schedule = {
         'task': 'app.tasks.cache_cleanup.cleanup_old_cache',
         'schedule': timedelta(hours=6),
         'args': ()
+    },
+    
+    'poll-station-availability': {
+        'task': 'app.tasks.realtime_tasks.poll_station_availability_new_version',
+        'schedule': timedelta(minutes=1),  # Run every 1 minute for testing
+        'args': ()
     }
 }
 

@@ -585,5 +585,28 @@ class TomTomService:
             # Επιστρέφουμε AVAILABLE ως default
             return {station_id: 'AVAILABLE' for station_id in station_ids}
 
+    async def get_station_availability(self, tomtom_id: str, lat=None, lon=None) -> dict:
+        """
+        Fetch real-time availability for a specific station by TomTom ID.
+        Επιστρέφει dict με status και last_updated (ή None αν δεν βρεθεί).
+        Αν δοθεί lat/lon, κάνει targeted search με radius 3km.
+        """
+        try:
+            if lat is not None and lon is not None:
+                stations = await self.get_stations_in_area(lat, lon, 3000)  # 3km
+            else:
+                # Default: Αθήνα, 3km
+                stations = await self.get_stations_in_area(38.0, 23.7, 3000)
+            for station in stations:
+                if station.tomtom_id == tomtom_id:
+                    return {
+                        "status": station.status,
+                        "last_updated": getattr(station, "last_updated", datetime.utcnow())
+                    }
+            return None
+        except Exception as e:
+            logger.error(f"Error in get_station_availability for {tomtom_id}: {e}")
+            return None
+
 # Singleton instance
 tomtom_service = TomTomService() 

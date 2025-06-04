@@ -64,11 +64,9 @@ class HistoricalRepository:
             # Ensure required fields
             if not all(k in data for k in ["station_id", "timestamp", "status"]):
                 raise ValueError("Missing required fields in historical data")
-            
             result = await self.collection.insert_one(data)
             logger.debug(f"Saved historical data for station {data['station_id']}")
             return str(result.inserted_id)
-            
         except Exception as e:
             logger.error(f"Error saving historical data: {e}")
             raise
@@ -201,9 +199,9 @@ class HistoricalRepository:
     async def delete_old_records(self, cutoff_date: datetime) -> int:
         """Delete historical records older than cutoff date"""
         try:
-        result = await self.collection.delete_many({
-            "timestamp": {"$lt": cutoff_date}
-        })
+            result = await self.collection.delete_many({
+                "timestamp": {"$lt": cutoff_date}
+            })
             deleted_count = result.deleted_count
             logger.info(f"Deleted {deleted_count} historical records older than {cutoff_date}")
             return deleted_count
