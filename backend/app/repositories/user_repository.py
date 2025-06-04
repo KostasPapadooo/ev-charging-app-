@@ -123,6 +123,20 @@ class UserRepository(BaseRepository[User]):
                 return_document=True
             )
 
+            # --- Analytics logging ---
+            try:
+                from app.repositories.analytics_repository import analytics_repository
+                await analytics_repository.log_event({
+                    "event_type": "favorite_change",
+                    "user_id": str(user_id),
+                    "station_id": station_id,
+                    "action": action,
+                    "timestamp": datetime.utcnow()
+                })
+            except Exception as e:
+                logger.warning(f"Failed to log favorite_change event: {e}")
+            # ------------------------
+
             if doc:
                 return self.model_class(**doc)
             return None
