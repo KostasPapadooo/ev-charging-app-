@@ -56,7 +56,7 @@ beat_schedule = {
     
     'poll-station-availability': {
         'task': 'app.tasks.realtime_tasks.poll_station_availability_new_version',
-        'schedule': timedelta(minutes=1),  # Run every 1 minute for testing
+        'schedule': timedelta(minutes=5),  # Run every 5 minutes
         'args': ()
     }
 }

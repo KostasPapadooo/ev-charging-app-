@@ -15,6 +15,7 @@ const Dashboard = () => {
   const [locationError, setLocationError] = useState(null);
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [stations, setStations] = useState([]);
+  const [displayStations, setDisplayStations] = useState([]); // For map
   const [loading, setLoading] = useState(true);
   const [currentRadius, setCurrentRadius] = useState(500); // Αρχική ακτίνα 500m
   const intervalRef = useRef(null);
@@ -27,24 +28,24 @@ const Dashboard = () => {
   }, [isAuthenticated, authLoading, navigate]);
 
   // Fetch stations data with specific radius
-  const fetchStations = useCallback(async (lat, lon, radius = 500) => {
+  const fetchStations = useCallback(async (lat, lon, radius = 500, showLoading = true) => {
     try {
-      setLoading(true);
-      console.log(`Fetching stations within ${radius}m radius from (${lat}, ${lon})`);
-      
+      if (showLoading) setLoading(true);
       const response = await fetch(
         `http://localhost:8000/api/stations/nearby/search?lat=${lat}&lon=${lon}&radius=${radius}&limit=1000`
       );
       const data = await response.json();
-      
-      console.log(`Found ${data.stations?.length || 0} stations within ${radius}m`);
-      setStations(data.stations || []);
+      setStations(data.stations || []); // Always update for stats
+      if (showLoading) {
+        setDisplayStations(data.stations || []); // Only update map on manual fetch
+      }
       setCurrentRadius(radius);
-      setLoading(false);
+      if (showLoading) setLoading(false);
     } catch (error) {
       console.error('Error fetching stations:', error);
       setStations([]);
-      setLoading(false);
+      if (showLoading) setDisplayStations([]);
+      if (showLoading) setLoading(false);
     }
   }, []);
 
@@ -123,8 +124,24 @@ const Dashboard = () => {
     }
   }, [fetchStations]);
 
+  // Auto-refresh effect (only update stats, not map)
   useEffect(() => {
-    // Only proceed if user is authenticated
+    if (!userLocation) return;
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+    }
+    intervalRef.current = setInterval(() => {
+      fetchStations(userLocation.lat, userLocation.lon, currentRadius, false); // false: no loading, no map update
+    }, AUTO_REFRESH_INTERVAL);
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, [userLocation, currentRadius, fetchStations]);
+
+  // On first load or manual refresh, update both stats and map
+  useEffect(() => {
     if (isAuthenticated && user) {
       getCurrentLocationAndProceed();
     }
@@ -158,40 +175,16 @@ const Dashboard = () => {
   const handleRefresh = useCallback((newRadius) => {
     if (userLocation) {
       const radiusToUse = newRadius || currentRadius;
-      console.log(`Refreshing with radius: ${radiusToUse}m`);
-      fetchStations(userLocation.lat, userLocation.lon, radiusToUse);
+      fetchStations(userLocation.lat, userLocation.lon, radiusToUse, true); // true: update map and stats
     }
   }, [userLocation, currentRadius, fetchStations]);
 
   // Handle radius change from StationsMap
   const handleRadiusChange = useCallback((newRadius) => {
-    console.log(`Dashboard: Radius changed to ${newRadius}m`);
     if (userLocation) {
-      fetchStations(userLocation.lat, userLocation.lon, newRadius);
+      fetchStations(userLocation.lat, userLocation.lon, newRadius, true); // true: update map and stats
     }
   }, [userLocation, fetchStations]);
-
-  // Auto-refresh effect
-  useEffect(() => {
-    if (!userLocation) return;
-
-    // Clear any previous interval
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-    }
-
-    // Set up new interval
-    intervalRef.current = setInterval(() => {
-      fetchStations(userLocation.lat, userLocation.lon, currentRadius);
-    }, AUTO_REFRESH_INTERVAL);
-
-    // Cleanup on unmount or when dependencies change
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, [userLocation, currentRadius, fetchStations]);
 
   // Show loading state while checking authentication
   if (authLoading) {
@@ -261,7 +254,7 @@ const Dashboard = () => {
   }
 
   // Main dashboard view
-  const statusCounts = getStatusCounts(stations);
+  const statusCounts = getStatusCounts(stations); // Use live stations for cards
 
   return (
     <div className="dashboard-container">
@@ -312,7 +305,7 @@ const Dashboard = () => {
       <StationsMap 
         userLocation={userLocation}
         locationPermission={locationPermission}
-        stations={stations}
+        stations={displayStations} // Only update map on manual fetch
         currentRadius={currentRadius}
         onRefresh={handleRefresh}
         onRadiusChange={handleRadiusChange}
