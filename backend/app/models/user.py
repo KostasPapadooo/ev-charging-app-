@@ -68,6 +68,7 @@ class User(BaseModel):
         "address": ""
     }
     preferences: UserPreferences = Field(default_factory=UserPreferences)
+    favorite_stations: List[str] = []  # List of station IDs marked as favorites
     created_at: datetime = Field(default_factory=datetime.utcnow)
     last_login: datetime = Field(default_factory=datetime.utcnow)
     

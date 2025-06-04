@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -39,6 +39,7 @@ class UserResponse(BaseModel):
     subscription_tier: str
     is_active: bool
     created_at: datetime
+    favorite_stations: List[str] = []
 
 class Token(BaseModel):
     access_token: str
@@ -49,6 +50,10 @@ class TokenData(BaseModel):
     email: Optional[str] = None
     user_id: Optional[str] = None
     subscription_tier: Optional[str] = None
+
+class FavoriteStationUpdate(BaseModel):
+    station_id: str
+    action: str  # 'add' or 'remove'
 
 # Utility functions
 def verify_password(plain_password, hashed_password):
@@ -142,7 +147,8 @@ async def register_user(user_in: UserCreateRequest):
             phone=created_user.phone,
             subscription_tier=created_user.subscription_tier,
             is_active=created_user.is_active,
-            created_at=created_user.created_at
+            created_at=created_user.created_at,
+            favorite_stations=created_user.favorite_stations
         )
         
     except HTTPException:
@@ -198,10 +204,10 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
                 phone=user.phone,
                 subscription_tier=user.subscription_tier,
                 is_active=user.is_active,
-                created_at=user.created_at
+                created_at=user.created_at,
+                favorite_stations=user.favorite_stations
             )
         }
-        
     except HTTPException:
         raise
     except Exception as e:
@@ -213,7 +219,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 
 @router.get("/me", response_model=UserResponse)
 async def read_users_me(current_user: User = Depends(get_current_user)):
-    """Get current user information"""
+    """Get current user's information"""
     return UserResponse(
         id=str(current_user.id),
         email=current_user.email,
@@ -222,10 +228,55 @@ async def read_users_me(current_user: User = Depends(get_current_user)):
         phone=current_user.phone,
         subscription_tier=current_user.subscription_tier,
         is_active=current_user.is_active,
-        created_at=current_user.created_at
+        created_at=current_user.created_at,
+        favorite_stations=current_user.favorite_stations
     )
 
 @router.post("/logout")
 async def logout():
-    """Logout user (client should remove token)"""
-    return {"message": "Successfully logged out"} 
+    """Logout user - client should handle token removal"""
+    return {"message": "Successfully logged out"}
+
+@router.post("/favorites", response_model=UserResponse)
+async def update_favorite_station(
+    update: FavoriteStationUpdate, 
+    current_user: User = Depends(get_current_user)
+):
+    """Add or remove a station from user's favorites"""
+    try:
+        user_id = str(current_user.id)
+        station_id = update.station_id
+        action = update.action
+
+        if action not in ['add', 'remove']:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Action must be 'add' or 'remove'"
+            )
+
+        updated_user = await repositories.users.update_favorite_station(user_id, station_id, action)
+        if not updated_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+
+        return UserResponse(
+            id=str(updated_user.id),
+            email=updated_user.email,
+            first_name=updated_user.first_name,
+            last_name=updated_user.last_name,
+            phone=updated_user.phone,
+            subscription_tier=updated_user.subscription_tier,
+            is_active=updated_user.is_active,
+            created_at=updated_user.created_at,
+            favorite_stations=updated_user.favorite_stations
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating favorite station: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error while updating favorite station"
+        ) 

@@ -15,6 +15,7 @@ export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [token, setToken] = useState(localStorage.getItem('token'));
     const [loading, setLoading] = useState(true);
+    const [favoriteStations, setFavoriteStations] = useState([]);
 
     // Set up axios interceptor for authentication
     useEffect(() => {
@@ -32,6 +33,10 @@ export const AuthProvider = ({ children }) => {
                 try {
                     const response = await axios.get('http://localhost:8000/api/auth/me');
                     setUser(response.data);
+                    // Fetch favorite stations if available
+                    if (response.data.favorite_stations) {
+                        setFavoriteStations(response.data.favorite_stations);
+                    }
                 } catch (error) {
                     console.error('Auth check failed:', error);
                     logout();
@@ -59,6 +64,9 @@ export const AuthProvider = ({ children }) => {
             
             setToken(access_token);
             setUser(userData);
+            if (userData.favorite_stations) {
+                setFavoriteStations(userData.favorite_stations);
+            }
             localStorage.setItem('token', access_token);
             
             return { success: true, user: userData };
@@ -87,11 +95,39 @@ export const AuthProvider = ({ children }) => {
     const logout = () => {
         setToken(null);
         setUser(null);
+        setFavoriteStations([]);
         localStorage.removeItem('token');
         delete axios.defaults.headers.common['Authorization'];
         
         // Force a page reload to clear any cached data
         window.location.href = '/';
+    };
+
+    const toggleFavoriteStation = async (stationId) => {
+        if (!user) return { success: false, error: 'User not logged in' };
+
+        try {
+            const isFavorite = favoriteStations.includes(stationId);
+            const action = isFavorite ? 'remove' : 'add';
+            const response = await axios.post('http://localhost:8000/api/auth/favorites', {
+                station_id: stationId,
+                action: action
+            });
+
+            if (response.data) {
+                setUser(response.data);
+                if (action === 'add') {
+                    setFavoriteStations([...favoriteStations, stationId]);
+                } else {
+                    setFavoriteStations(favoriteStations.filter(id => id !== stationId));
+                }
+                return { success: true, isFavorite: !isFavorite };
+            }
+            return { success: false, error: 'Failed to update favorites' };
+        } catch (error) {
+            console.error('Failed to toggle favorite station:', error);
+            return { success: false, error: error.message };
+        }
     };
 
     const value = {
@@ -101,7 +137,9 @@ export const AuthProvider = ({ children }) => {
         register,
         logout,
         loading,
-        isAuthenticated: !!user && !!token
+        isAuthenticated: !!user && !!token,
+        favoriteStations,
+        toggleFavoriteStation
     };
 
     return (

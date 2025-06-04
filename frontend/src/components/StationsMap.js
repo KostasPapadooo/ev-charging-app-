@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import '../styles/StationsMap.css';
+import { useAuth } from '../contexts/AuthContext';
 
 // Fix for default markers
 delete L.Icon.Default.prototype._getIconUrl;
@@ -13,25 +14,29 @@ L.Icon.Default.mergeOptions({
 });
 
 // Custom icons for different station statuses
-const createCustomIcon = (status) => {
+const createCustomIcon = (status, isFavorite = false) => {
   let color = '#6c757d'; // default gray
   
-  switch (status?.toUpperCase()) {
-    case 'AVAILABLE':
-      color = '#28a745'; // green
-      break;
-    case 'OCCUPIED':
-    case 'BUSY':
-      color = '#dc3545'; // red
-      break;
-    case 'OUT_OF_ORDER':
-    case 'OUTOFORDER':
-      color = '#6c757d'; // gray
-      break;
-    case 'UNKNOWN':
-    default:
-      color = '#ffc107'; // yellow
-      break;
+  if (isFavorite) {
+    color = '#ff69b4'; // pink for favorite stations
+  } else {
+    switch (status?.toUpperCase()) {
+      case 'AVAILABLE':
+        color = '#28a745'; // green
+        break;
+      case 'OCCUPIED':
+      case 'BUSY':
+        color = '#dc3545'; // red
+        break;
+      case 'OUT_OF_ORDER':
+      case 'OUTOFORDER':
+        color = '#6c757d'; // gray
+        break;
+      case 'UNKNOWN':
+      default:
+        color = '#ffc107'; // yellow
+        break;
+    }
   }
 
   return L.divIcon({
@@ -67,6 +72,7 @@ const StationsMap = ({
   onRefresh, 
   onRadiusChange 
 }) => {
+  const { isAuthenticated, favoriteStations, toggleFavoriteStation } = useAuth();
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState('');
   const [radius, setRadius] = useState(currentRadius);
@@ -122,6 +128,17 @@ const StationsMap = ({
     setRadius(newRadius);
     if (onRadiusChange) {
       onRadiusChange(newRadius);
+    }
+  };
+
+  const handleToggleFavorite = async (stationId) => {
+    if (!isAuthenticated) {
+      alert('Please log in to mark stations as favorites.');
+      return;
+    }
+    const result = await toggleFavoriteStation(stationId);
+    if (!result.success) {
+      alert('Failed to update favorite status. Please try again.');
     }
   };
 
@@ -308,7 +325,7 @@ const StationsMap = ({
                 station.location.coordinates[1], // latitude
                 station.location.coordinates[0]  // longitude
               ]}
-              icon={createCustomIcon(station.status)}
+              icon={createCustomIcon(station.status, favoriteStations.includes(station.tomtom_id))}
             >
               <Popup maxWidth={300}>
                 <div className="station-popup">
@@ -319,6 +336,22 @@ const StationsMap = ({
                     <span className={`status-badge ${station.status?.toLowerCase()}`}>
                       {station.status || 'Unknown'}
                     </span>
+                    {isAuthenticated && (
+                      <button 
+                        className="favorite-btn" 
+                        onClick={() => handleToggleFavorite(station.tomtom_id)}
+                        style={{ 
+                          background: 'none', 
+                          border: 'none', 
+                          cursor: 'pointer', 
+                          marginLeft: '140px',
+                          fontSize: '20px',
+                          color: favoriteStations.includes(station.tomtom_id) ? '#ff69b4' : '#ccc'
+                        }}
+                      >
+                        ♥
+                      </button>
+                    )}
                   </div>
 
                   <div className="connectors-info">
@@ -351,6 +384,7 @@ const StationsMap = ({
                         Updated: {new Date(station.last_updated).toLocaleString()}
                       </p>
                     )}
+                    
                   </div>
                 </div>
               </Popup>

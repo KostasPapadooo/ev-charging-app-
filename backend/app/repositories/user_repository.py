@@ -98,5 +98,33 @@ class UserRepository(BaseRepository[User]):
             logger.error(f"Error getting user by ID {user_id}: {e}")
             raise
 
+    async def update_favorite_station(self, user_id: str, station_id: str, action: str) -> Optional[User]:
+        """Add or remove a station from user's favorites"""
+        try:
+            from bson import ObjectId
+            if isinstance(user_id, str):
+                user_id = ObjectId(user_id)
+
+            update_operation = {
+                'add': {'$addToSet': {'favorite_stations': station_id}},
+                'remove': {'$pull': {'favorite_stations': station_id}}
+            }.get(action)
+
+            if not update_operation:
+                raise ValueError(f"Invalid action: {action}")
+
+            doc = await self.collection.find_one_and_update(
+                {"_id": user_id},
+                update_operation,
+                return_document=True
+            )
+
+            if doc:
+                return self.model_class(**doc)
+            return None
+        except Exception as e:
+            logger.error(f"Error updating favorite station for user {user_id}: {e}")
+            raise
+
 # Singleton instance
 user_repository = UserRepository() 
