@@ -128,8 +128,8 @@ const Dashboard = () => {
   }, [getCurrentLocationAndProceed, isAuthenticated, user]);
 
   const handleLocationRequest = async () => {
-    setShowLocationModal(false);
-    await getCurrentLocationAndProceed();
+      setShowLocationModal(false);
+      await getCurrentLocationAndProceed();
   };
 
   const handleLocationDenied = async () => {

@@ -1,5 +1,6 @@
 from celery import Celery
 from app.core.beat_config import beat_schedule
+from app.core.beat_config import task_routes
 
 celery_app = Celery(
     'ev_charging',
@@ -10,5 +11,6 @@ celery_app = Celery(
 
 # Ρυθμίσεις για τον Celery Beat
 celery_app.conf.beat_schedule = beat_schedule
+celery_app.conf.task_routes = task_routes
 
 celery_app.conf.timezone = 'UTC' 

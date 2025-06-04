@@ -4,80 +4,212 @@ from app.models.station import Station
 import pymongo
 from app.core.config import settings
 import logging
+from motor.motor_asyncio import AsyncIOMotorCollection
+from app.database.connection import get_database
 
 logger = logging.getLogger(__name__)
 
-class HistoricalStationRepository:
+class HistoricalRepository:
     def __init__(self):
-        # Δημιουργία σύνδεσης απευθείας, χωρίς χρήση get_database()
-        logger.info("Creating database connection for HistoricalStationRepository")
+        self.db = None
+        self.collection: AsyncIOMotorCollection = None
+
+    async def initialize(self):
+        """Initialize repository with database connection"""
+        self.db = get_database()
+        self.collection = self.db.historical_stations
+        await self._ensure_indexes()
+        logger.info("HistoricalRepository initialized successfully")
+
+    async def _ensure_indexes(self):
+        """Create necessary indexes for historical data"""
         try:
-            import motor.motor_asyncio
-            client = motor.motor_asyncio.AsyncIOMotorClient(settings.mongodb_url)
-            self.db = client[settings.database_name]
+            # Check existing indexes
+            existing_indexes = await self.collection.list_indexes().to_list(length=None)
+            index_names = [idx['name'] for idx in existing_indexes]
+            
+            # Compound index for station_id and timestamp
+            if 'station_id_1_timestamp_-1' not in index_names:
+                await self.collection.create_index(
+                    [("station_id", 1), ("timestamp", -1)],
+                    background=True
+                )
+                logger.info("Created station_id and timestamp compound index")
+            
+            # TTL index for automatic data cleanup
+            if 'timestamp_ttl' not in index_names:
+                await self.collection.create_index(
+                    "timestamp",
+                    expireAfterSeconds=90 * 24 * 60 * 60,  # 90 days
+                    name="timestamp_ttl",
+                    background=True
+                )
+                logger.info("Created TTL index for automatic cleanup")
+            
+            # Index for status queries
+            if 'status_1_timestamp_-1' not in index_names:
+                await self.collection.create_index(
+                    [("status", 1), ("timestamp", -1)],
+                    background=True
+                )
+                logger.info("Created status and timestamp compound index")
+            
         except Exception as e:
-            logger.error(f"Error creating database connection: {str(e)}")
+            logger.error(f"Error ensuring indexes: {e}")
             raise
-        self.collection = self.db["historical_stations"]
-        # Προσθήκη σύγχρονου client για pymongo
-        self.sync_db = pymongo.MongoClient(settings.mongodb_url)
-        self.sync_collection = self.sync_db[settings.database_name]["historical_stations"]
     
-    async def save_historical_data(self, data: dict) -> str:
-        """Save historical data for a station"""
-        data["timestamp"] = datetime.utcnow()
-        result = await self.collection.insert_one(data)
-        return str(result.inserted_id)
-    
-    async def save_historical_batch(self, data: List[dict]) -> int:
-        """Save historical data for multiple stations"""
-        if not data:
-            return 0
+    async def save_historical_data(self, data: Dict[str, Any]) -> str:
+        """Save historical station data"""
+        try:
+            # Ensure required fields
+            if not all(k in data for k in ["station_id", "timestamp", "status"]):
+                raise ValueError("Missing required fields in historical data")
             
-        documents = data.copy()  # Create a copy to avoid modifying the original data
-        timestamp = datetime.utcnow()
-        for doc in documents:
-            doc["timestamp"] = timestamp
+            result = await self.collection.insert_one(data)
+            logger.debug(f"Saved historical data for station {data['station_id']}")
+            return str(result.inserted_id)
             
-        result = await self.collection.insert_many(documents)
-        return len(result.inserted_ids)
+        except Exception as e:
+            logger.error(f"Error saving historical data: {e}")
+            raise
     
     async def get_station_history(
         self, 
-        tomtom_id: str, 
-        start_date: datetime, 
-        end_date: Optional[datetime] = None
-    ) -> List[dict]:
+        station_id: str,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+        limit: int = 100
+    ) -> List[Dict[str, Any]]:
         """Get historical data for a specific station"""
-        if end_date is None:
-            end_date = datetime.utcnow()
+        try:
+            query = {"station_id": station_id}
             
-        query = {
-            "tomtom_id": tomtom_id,
+            if start_date or end_date:
+                query["timestamp"] = {}
+                if start_date:
+                    query["timestamp"]["$gte"] = start_date
+                if end_date:
+                    query["timestamp"]["$lte"] = end_date
+            
+            cursor = self.collection.find(query)\
+                .sort("timestamp", -1)\
+                .limit(limit)
+            
+            history = await cursor.to_list(length=limit)
+            return history
+            
+        except Exception as e:
+            logger.error(f"Error getting station history: {e}")
+            return []
+
+    async def get_status_changes(
+        self,
+        station_id: str,
+        start_date: datetime,
+        end_date: datetime
+    ) -> List[Dict[str, Any]]:
+        """Get status change history for a station"""
+        try:
+            pipeline = [
+                {
+                    "$match": {
+                        "station_id": station_id,
+                        "timestamp": {
+                            "$gte": start_date,
+                            "$lte": end_date
+                        }
+                    }
+                },
+                {
+                    "$sort": {"timestamp": 1}
+                },
+                {
+                    "$group": {
+                        "_id": "$station_id",
+                        "changes": {
+                            "$push": {
+                                "status": "$status",
+                                "timestamp": "$timestamp"
+                            }
+                        }
+                    }
+                }
+            ]
+            
+            result = await self.collection.aggregate(pipeline).to_list(length=1)
+            return result[0]["changes"] if result else []
+            
+        except Exception as e:
+            logger.error(f"Error getting status changes: {e}")
+            return []
+
+    async def get_availability_stats(
+        self,
+        station_id: str,
+        start_date: datetime,
+        end_date: datetime
+    ) -> Dict[str, Any]:
+        """Get availability statistics for a station"""
+        try:
+            pipeline = [
+                {
+                    "$match": {
+                        "station_id": station_id,
             "timestamp": {
                 "$gte": start_date,
                 "$lte": end_date
             }
         }
-        
-        data = await self.collection.find(query).sort("timestamp", 1).to_list(length=1000)
-        return data
+                },
+                {
+                    "$group": {
+                        "_id": "$status",
+                        "count": {"$sum": 1},
+                        "total_duration_minutes": {
+                            "$sum": {
+                                "$divide": [
+                                    {"$subtract": [
+                                        {"$ifNull": ["$next_timestamp", end_date]},
+                                        "$timestamp"
+                                    ]},
+                                    60000  # Convert ms to minutes
+                                ]
+                            }
+                        }
+                    }
+                }
+            ]
+            
+            results = await self.collection.aggregate(pipeline).to_list(length=None)
+            
+            stats = {
+                "total_records": sum(r["count"] for r in results),
+                "status_distribution": {
+                    r["_id"]: {
+                        "count": r["count"],
+                        "duration_minutes": round(r["total_duration_minutes"], 2)
+                    } for r in results
+                }
+            }
+            
+            return stats
+            
+        except Exception as e:
+            logger.error(f"Error getting availability stats: {e}")
+            return {"total_records": 0, "status_distribution": {}}
     
-    async def cleanup_old_data(self, days_to_keep: int = 30) -> int:
-        """Remove historical data older than specified days"""
-        cutoff_date = datetime.utcnow() - timedelta(days=days_to_keep)
+    async def delete_old_records(self, cutoff_date: datetime) -> int:
+        """Delete historical records older than cutoff date"""
+        try:
         result = await self.collection.delete_many({
             "timestamp": {"$lt": cutoff_date}
         })
-        return result.deleted_count
-    
-    def save_historical_batch_sync(self, historical_data: List[Dict[str, Any]]) -> int:
-        """Save a batch of historical data to the database (synchronous)"""
-        try:
-            if not historical_data:
-                return 0
-            result = self.sync_collection.insert_many(historical_data, ordered=False)
-            return len(result.inserted_ids)
+            deleted_count = result.deleted_count
+            logger.info(f"Deleted {deleted_count} historical records older than {cutoff_date}")
+            return deleted_count
         except Exception as e:
-            logger.error(f"Error saving historical batch (sync): {e}")
-            raise 
+            logger.error(f"Error deleting old records: {e}")
+            return 0
+
+# Global instance
+historical_repository = HistoricalRepository() 

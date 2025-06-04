@@ -87,7 +87,7 @@ class StationRepository:
         return result
 
     async def find_nearby_stations(
-        self,
+        self, 
         lat: float,
         lon: float,
         radius_meters: int = 5000,
@@ -149,7 +149,7 @@ class StationRepository:
                 "tomtom_id": station.tomtom_id,
                 "name": station.name,
                 "location": {
-                    "type": "Point",
+                            "type": "Point",
                     "coordinates": station.location.coordinates
                 },
                 "address": station.address if station.address else "",
@@ -271,11 +271,11 @@ class StationRepository:
             
             logger.info(f"Retrieved {len(stations)} stations as raw data")
             return stations
-            
+        
         except Exception as e:
             logger.error(f"Error getting all stations: {e}")
             return []
-
+    
     async def get_station_by_id(self, station_id: str) -> Optional[Station]:
         """Get station by TomTom ID"""
         try:
@@ -328,7 +328,7 @@ class StationRepository:
         except Exception as e:
             logger.error(f"Error converting station data to object: {e}")
             raise
-
+    
     def _convert_tomtom_to_station(self, tomtom_data: Dict[str, Any]) -> Station:
         """Convert TomTom API data to Station object"""
         try:
