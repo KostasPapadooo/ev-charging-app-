@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import StationsMap from '../components/StationsMap';
+import AvailabilityRate from '../components/AvailabilityRate';
 import '../styles/Dashboard.css';
 
 const AUTO_REFRESH_INTERVAL = 5000; // ms (5 seconds)
@@ -301,6 +302,9 @@ const Dashboard = () => {
           <span className="stat-number">{statusCounts.unknown}</span>
         </div>
       </div>
+      
+      {/* Availability Rate Visualization */}
+      <AvailabilityRate userLocation={userLocation} />
       
       <StationsMap 
         userLocation={userLocation}
