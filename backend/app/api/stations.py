@@ -283,3 +283,64 @@ async def manual_update_availability():
     except Exception as e:
         logger.error(f"❌ Manual update failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/analytics/availability-rate")
+async def get_availability_rate(
+    lat: float = Query(..., description="Latitude"),
+    lon: float = Query(..., description="Longitude"),
+    radius: int = Query(3000, description="Search radius in meters")
+):
+    """
+    Return the percentage of available stations in a given area (for user analytics card)
+    """
+    try:
+        stations = await station_repository.find_nearby_stations(
+            lat=lat,
+            lon=lon,
+            radius_meters=radius,
+            limit=1000
+        )
+        total = len(stations)
+        if total == 0:
+            return {"availability_rate": 0.0, "sample_size": 0}
+        available = sum(1 for s in stations if s.get("status", "").upper() == "AVAILABLE")
+        rate = available / total
+        return {
+            "availability_rate": round(rate, 2),
+            "sample_size": total
+        }
+    except Exception as e:
+        logger.error(f"Error in get_availability_rate: {e}")
+        raise HTTPException(status_code=500, detail="Failed to compute availability rate")
+
+@router.get("/analytics/favorite-history")
+async def get_favorite_station_history(
+    station_id: str = Query(..., description="TomTom ID of the favorite station"),
+    hours: int = Query(24, description="How many past hours to include in the history")
+):
+    """
+    Return the availability history for a given favorite station (for line chart analytics)
+    """
+    try:
+        from app.repositories.historical_repository import historical_repository
+        await historical_repository.initialize()
+        from datetime import datetime, timedelta
+        cutoff = datetime.utcnow() - timedelta(hours=hours)
+        # Find historical records for this station
+        cursor = historical_repository.collection.find({
+            "station_id": station_id,
+            "timestamp": {"$gte": cutoff}
+        }).sort("timestamp", 1)
+        history = []
+        async for doc in cursor:
+            history.append({
+                "timestamp": doc["timestamp"].isoformat(),
+                "status": doc.get("status", "UNKNOWN")
+            })
+        return {
+            "station_id": station_id,
+            "history": history
+        }
+    except Exception as e:
+        logger.error(f"Error in get_favorite_station_history: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get favorite station history: {e}")

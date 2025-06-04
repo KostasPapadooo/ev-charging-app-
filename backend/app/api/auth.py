@@ -10,6 +10,7 @@ import logging
 from app.core.config import settings
 from app.repositories import repositories
 from app.models.user import User
+from app.repositories.analytics_repository import analytics_repository
 
 logger = logging.getLogger(__name__)
 
@@ -279,4 +280,43 @@ async def update_favorite_station(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error while updating favorite station"
-        ) 
+        )
+
+@router.get("/users/me/analytics")
+async def get_user_analytics(current_user: User = Depends(get_current_user)):
+    """Return personal analytics for the authenticated user"""
+    try:
+        user_id = str(current_user.id)
+        await analytics_repository.initialize()
+        # 1. Πλήθος αναζητήσεων
+        total_searches = await analytics_repository.collection.count_documents({
+            "event_type": "station_search",
+            "user_id": user_id
+        })
+        # 2. Επιτυχημένες αναζητήσεις (results_count > 0)
+        successful_searches = await analytics_repository.collection.count_documents({
+            "event_type": "station_search",
+            "user_id": user_id,
+            "results_count": {"$gt": 0}
+        })
+        # 3. Μέσος όρος διαθεσιμότητας (avg results_count)
+        pipeline = [
+            {"$match": {"event_type": "station_search", "user_id": user_id}},
+            {"$group": {"_id": None, "avg_results": {"$avg": "$results_count"}}}
+        ]
+        avg_result = await analytics_repository.collection.aggregate(pipeline).to_list(length=1)
+        avg_availability = avg_result[0]["avg_results"] if avg_result else 0.0
+        # 4. Πλήθος αλλαγών αγαπημένων
+        favorite_changes = await analytics_repository.collection.count_documents({
+            "event_type": "favorite_change",
+            "user_id": user_id
+        })
+        return {
+            "total_searches": total_searches,
+            "successful_searches": successful_searches,
+            "avg_availability": round(avg_availability, 2),
+            "favorite_changes": favorite_changes
+        }
+    except Exception as e:
+        logger.error(f"Error in get_user_analytics: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get user analytics: {e}") 
