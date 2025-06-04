@@ -1,41 +1,63 @@
 from celery.schedules import crontab
+from datetime import timedelta
 from app.core.config import settings
 
-# Define the beat schedule as a dictionary
-# This will be loaded into celery_app.conf.beat_schedule later
-beat_schedule = {
-    'batch-update-athens-stations': {
-        'task': 'app.tasks.batch_tasks.batch_update_stations',
-        'schedule': crontab(minute=f'*/{settings.BATCH_UPDATE_INTERVAL_MINUTES}'),
-        'args': (
-            settings.ATHENS_CENTER_LAT,
-            settings.ATHENS_CENTER_LON,
-            settings.ATHENS_RADIUS_METERS,
-            settings.ATHENS_CITY_NAME
-        ),
-        'options': {'queue': 'batch_queue'}
+# Default locations to monitor (major Greek cities)
+MONITORED_LOCATIONS = [
+    {
+        "name": "Athens",
+        "latitude": 37.9838,
+        "longitude": 23.7275,
+        "radius": 50000  # 50km radius
     },
-    'update-stations-thessaloniki-area': {
-        'task': 'app.tasks.batch_tasks.batch_update_stations',
-        'schedule': crontab(minute='5,35'),
-        'args': (
-            settings.THESSALONIKI_CENTER_LAT,
-            settings.THESSALONIKI_CENTER_LON,
-            settings.THESSALONIKI_RADIUS_METERS,
-            settings.THESSALONIKI_CITY_NAME
-        ),
-        'options': {'queue': 'batch_queue'}
+    {
+        "name": "Thessaloniki",
+        "latitude": 40.6401,
+        "longitude": 22.9444,
+        "radius": 30000  # 30km radius
     },
-    'poll-station-availability-realtime': {
-        'task': 'app.tasks.realtime_tasks.poll_station_availability_new_version',
-        'schedule': settings.DEFAULT_SPEED_LAYER_POLLING_INTERVAL_SECONDS,
-        'args': (),
-        'options': {'queue': 'realtime_queue'}
-    },
-    'cleanup-old-historical-data': {
-        'task': 'app.tasks.batch_tasks.cleanup_old_historical_data',
-        'schedule': crontab(hour=2, minute=0),  # Daily at 2 AM
-        'args': (settings.HISTORICAL_DATA_RETENTION_DAYS,),
-        'options': {'queue': 'batch_queue'}
+    {
+        "name": "Patras",
+        "latitude": 38.2466,
+        "longitude": 21.7345,
+        "radius": 20000  # 20km radius
     }
+]
+
+# Celery Beat Schedule Configuration
+beat_schedule = {
+    # Batch update stations for each monitored location
+    **{
+        f'update-stations-{location["name"].lower()}': {
+            'task': 'app.tasks.batch_tasks.batch_update_stations',
+            'schedule': timedelta(hours=1),  # Run every 1 hour
+            'args': (
+                location["latitude"],
+                location["longitude"],
+                location["radius"],
+                location["name"]
+            )
+        } for location in MONITORED_LOCATIONS
+    },
+    
+    # Cleanup old historical data (runs daily at 03:00)
+    'cleanup-historical-data': {
+        'task': 'app.tasks.batch_tasks.cleanup_old_historical_data',
+        'schedule': crontab(hour=3, minute=0),
+        'args': (30,)  # Keep 30 days of historical data
+    },
+    
+    # Cache cleanup (runs every 6 hours)
+    'cleanup-cache': {
+        'task': 'app.tasks.cache_cleanup.cleanup_old_cache',
+        'schedule': timedelta(hours=6),
+        'args': ()
+    }
+}
+
+# Task Routing
+task_routes = {
+    'app.tasks.batch_tasks.*': {'queue': 'batch_queue'},
+    'app.tasks.realtime_tasks.*': {'queue': 'realtime_queue'},
+    'app.tasks.cache_cleanup.*': {'queue': 'maintenance_queue'}
 } 
