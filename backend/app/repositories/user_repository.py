@@ -87,10 +87,14 @@ class UserRepository(BaseRepository[User]):
         """Get user by ID"""
         try:
             from bson import ObjectId
-            if isinstance(user_id, str):
-                user_id = ObjectId(user_id)
-            
-            doc = await self.collection.find_one({"_id": user_id})
+            doc = None
+            # First try as ObjectId
+            if ObjectId.is_valid(user_id):
+                obj_id = ObjectId(user_id)
+                doc = await self.collection.find_one({"_id": obj_id})
+            # If not found, try as string
+            if doc is None:
+                doc = await self.collection.find_one({"_id": user_id})
             if doc:
                 return self.model_class(**doc)
             return None
