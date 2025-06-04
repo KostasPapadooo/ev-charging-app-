@@ -25,12 +25,8 @@ venv/
 env/
 ENV/
 
-# Exclude all .env files
-.env
-.env.*
 
-# But allow backend/.env
-!backend/.env
+
 
 # Node.js
 node_modules/
