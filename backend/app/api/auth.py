@@ -105,15 +105,28 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         user_id: str = payload.get("user_id")
         subscription_tier: str = payload.get("subscription_tier")
         if email is None or user_id is None:
+            logger.warning(f"Invalid token payload: email={email}, user_id={user_id}")
             raise credentials_exception
         token_data = TokenData(email=email, user_id=user_id, subscription_tier=subscription_tier)
-    except JWTError:
+        
+        logger.debug(f"Token decoded successfully for user_id: {user_id}, email: {email}")
+    except JWTError as e:
+        logger.error(f"JWT decode error: {e}")
         raise credentials_exception
     
     # Use user_id for lookup instead of email for better uniqueness
     user = await repositories.users.get_by_id(token_data.user_id)
     if user is None:
-        raise credentials_exception
+        logger.error(f"User not found for user_id: {token_data.user_id}, email: {token_data.email}")
+        # Try fallback lookup by email
+        user = await repositories.users.find_by_email(token_data.email)
+        if user:
+            logger.info(f"Found user by email fallback: {token_data.email}")
+        else:
+            logger.error(f"User not found by email either: {token_data.email}")
+            raise credentials_exception
+    else:
+        logger.debug(f"User found successfully: {user.email}")
     return user
 
 # Routes
@@ -249,6 +262,8 @@ async def update_favorite_station(
         station_id = update.station_id
         action = update.action
 
+        logger.info(f"Updating favorite station - User ID: {user_id}, Station ID: {station_id}, Action: {action}")
+
         if action not in ['add', 'remove']:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -257,11 +272,13 @@ async def update_favorite_station(
 
         updated_user = await repositories.users.update_favorite_station(user_id, station_id, action)
         if not updated_user:
+            logger.error(f"Failed to update favorite station - User not found: {user_id}")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"
             )
 
+        logger.info(f"Successfully updated favorite station for user: {user_id}")
         return UserResponse(
             id=str(updated_user.id),
             email=updated_user.email,

@@ -54,7 +54,8 @@ class UserRepository(BaseRepository[User]):
                 "subscription_tier": subscription_tier,
                 "is_active": True,
                 "created_at": datetime.utcnow(),
-                "last_login": datetime.utcnow()
+                "last_login": datetime.utcnow(),
+                "favorite_stations": []  # Initialize empty favorite stations list
             }
             user = User(**user_data)
             return await self.create(user)
@@ -88,15 +89,22 @@ class UserRepository(BaseRepository[User]):
         try:
             from bson import ObjectId
             doc = None
-            # First try as ObjectId
+            
+            # First try as ObjectId if it's a valid ObjectId string
             if ObjectId.is_valid(user_id):
                 obj_id = ObjectId(user_id)
                 doc = await self.collection.find_one({"_id": obj_id})
-            # If not found, try as string
-            if doc is None:
+                logger.debug(f"Tried ObjectId lookup for {user_id}: {'found' if doc else 'not found'}")
+            
+            # If not found and user_id is not already an ObjectId, try as string
+            if doc is None and not ObjectId.is_valid(user_id):
                 doc = await self.collection.find_one({"_id": user_id})
+                logger.debug(f"Tried string lookup for {user_id}: {'found' if doc else 'not found'}")
+            
             if doc:
                 return self.model_class(**doc)
+            
+            logger.warning(f"User not found with ID: {user_id}")
             return None
         except Exception as e:
             logger.error(f"Error getting user by ID {user_id}: {e}")
@@ -106,8 +114,14 @@ class UserRepository(BaseRepository[User]):
         """Add or remove a station from user's favorites"""
         try:
             from bson import ObjectId
-            if isinstance(user_id, str):
-                user_id = ObjectId(user_id)
+            
+            # Convert user_id to ObjectId if valid, otherwise use as string
+            query_id = user_id
+            if ObjectId.is_valid(user_id):
+                query_id = ObjectId(user_id)
+                logger.debug(f"Using ObjectId for user lookup: {user_id}")
+            else:
+                logger.debug(f"Using string for user lookup: {user_id}")
 
             update_operation = {
                 'add': {'$addToSet': {'favorite_stations': station_id}},
@@ -117,8 +131,34 @@ class UserRepository(BaseRepository[User]):
             if not update_operation:
                 raise ValueError(f"Invalid action: {action}")
 
+            # First check if user exists before trying to update
+            existing_user = await self.collection.find_one({"_id": query_id})
+            if not existing_user:
+                logger.error(f"User not found for ID: {user_id} (query_id: {query_id})")
+                # Try alternative lookup method
+                if ObjectId.is_valid(user_id):
+                    # Try as string if ObjectId failed
+                    existing_user = await self.collection.find_one({"_id": user_id})
+                    if existing_user:
+                        query_id = user_id
+                        logger.info(f"Found user using string ID: {user_id}")
+                else:
+                    # Try as ObjectId if string failed
+                    try:
+                        alt_query_id = ObjectId(user_id)
+                        existing_user = await self.collection.find_one({"_id": alt_query_id})
+                        if existing_user:
+                            query_id = alt_query_id
+                            logger.info(f"Found user using ObjectId: {user_id}")
+                    except:
+                        pass
+                
+                if not existing_user:
+                    logger.error(f"User definitely not found with any method for ID: {user_id}")
+                    return None
+
             doc = await self.collection.find_one_and_update(
-                {"_id": user_id},
+                {"_id": query_id},
                 update_operation,
                 return_document=True
             )
@@ -128,7 +168,7 @@ class UserRepository(BaseRepository[User]):
                 from app.repositories.analytics_repository import analytics_repository
                 await analytics_repository.log_event({
                     "event_type": "favorite_change",
-                    "user_id": str(user_id),
+                    "user_id": str(query_id),
                     "station_id": station_id,
                     "action": action,
                     "timestamp": datetime.utcnow()
@@ -138,8 +178,11 @@ class UserRepository(BaseRepository[User]):
             # ------------------------
 
             if doc:
+                logger.info(f"Successfully updated favorite station for user {user_id}")
                 return self.model_class(**doc)
-            return None
+            else:
+                logger.error(f"Failed to update favorite station for user {user_id}")
+                return None
         except Exception as e:
             logger.error(f"Error updating favorite station for user {user_id}: {e}")
             raise
