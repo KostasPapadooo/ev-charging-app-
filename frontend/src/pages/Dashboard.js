@@ -318,7 +318,7 @@ const Dashboard = () => {
       </div>
       
       {/* Availability Rate Visualization */}
-      <AvailabilityRate userLocation={userLocation} />
+      <AvailabilityRate userLocation={userLocation} radius={currentRadius} />
       
       <StationsMap 
         userLocation={userLocation}

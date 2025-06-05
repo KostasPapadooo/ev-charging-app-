@@ -3,13 +3,13 @@
     justify-content: space-evenly;
     align-items: center;
     padding: 1rem;
-    background-color: #e9a4f9;
+    background-color: rgba(109, 23, 120, 0.9);
 }
 
 .nav-link {
     text-decoration: none;
-    color: #000;
-    font-size: 1.2rem;
+    color: #ffffff;
+    font-size: 2rem;
 
     &:hover {
         color: #b926cf;
@@ -17,13 +17,13 @@
 }
 
 .logout-button {
-    width: 5.5rem;
+    width: 8.5rem;
+    font-size: 2rem;
     background-color: #b926cf;
     color: white;
     border: none;
+    border-radius: 1.5rem;
     text-decoration: none;
-    font-size: 1.2rem;
-    border-radius: 0.7rem;
     
     &:hover {
          background-color: #71187e;

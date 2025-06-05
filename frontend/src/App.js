@@ -8,6 +8,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Register from './pages/Register';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
+import HomePage from './pages/HomePage';
 import './styles/Dashboard.css';
 
 function Navigation() {
@@ -37,29 +38,6 @@ function Navigation() {
         </>
       )}
     </nav>
-  );
-}
-
-function HomePage() {
-  const { isAuthenticated, user } = useAuth();
-
-  return (
-    <header className="App-header">
-      <h1>Welcome to EV Charging Stations</h1>
-      {isAuthenticated ? (
-        <div>
-          <p>Hello, {user.first_name}! You have a {user.subscription_tier} subscription.</p>
-          <Link to="/dashboard" className="App-link">Go to Dashboard</Link>
-        </div>
-      ) : (
-        <div>
-          <p>Please login or register to access the platform.</p>
-          <Link to="/login" className="App-link">Login</Link>
-          {' | '}
-          <Link to="/register" className="App-link">Register</Link>
-        </div>
-      )}
-    </header>
   );
 }
 

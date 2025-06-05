@@ -1,7 +1,7 @@
 // frontend/src/components/Register.js
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import '../styles/register.css'; // Import the new CSS file
 
 const Register = () => {
@@ -109,6 +109,12 @@ const Register = () => {
                     {loading ? 'Registering...' : 'Register'}
                 </button>
             </form>
+            
+            <div className="auth-navigation">
+                <p>
+                    Already have an account? <Link to="/login" className="auth-link">Login here</Link>
+                </p>
+            </div>
         </div>
     );
 };

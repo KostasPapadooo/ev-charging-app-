@@ -1,7 +1,7 @@
 // frontend/src/components/Login.js
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import '../styles/login.css'; // Import the new CSS file
 
 const Login = () => {
@@ -59,6 +59,12 @@ const Login = () => {
                     {loading ? 'Logging in...' : 'Login'}
                 </button>
             </form>
+            
+            <div className="auth-navigation">
+                <p>
+                    Not registered yet? <Link to="/register" className="auth-link">Click here</Link>
+                </p>
+            </div>
         </div>
     );
 };
