@@ -16,6 +16,7 @@ export const AuthProvider = ({ children }) => {
     const [token, setToken] = useState(localStorage.getItem('token'));
     const [loading, setLoading] = useState(true);
     const [favoriteStations, setFavoriteStations] = useState([]);
+    const [isPremium, setIsPremium] = useState(false);
 
     // Set up axios interceptor for authentication
     useEffect(() => {
@@ -26,6 +27,22 @@ export const AuthProvider = ({ children }) => {
         }
     }, [token]);
 
+    // Check premium status
+    const checkPremiumStatus = async () => {
+        if (!token) {
+            setIsPremium(false);
+            return;
+        }
+        
+        try {
+            const response = await axios.get('http://localhost:8000/api/auth/premium-status');
+            setIsPremium(response.data.is_premium);
+        } catch (error) {
+            console.error('Failed to check premium status:', error);
+            setIsPremium(false);
+        }
+    };
+
     // Check if user is logged in on app start
     useEffect(() => {
         const checkAuth = async () => {
@@ -33,8 +50,10 @@ export const AuthProvider = ({ children }) => {
                 try {
                     const response = await axios.get('http://localhost:8000/api/auth/me');
                     setUser(response.data);
-                    // Fetch favorite stations if available
-                    if (response.data.favorite_stations) {
+                    // Check premium status
+                    setIsPremium(response.data.subscription_tier === 'premium');
+                    // Fetch favorite stations if available and user is premium
+                    if (response.data.subscription_tier === 'premium' && response.data.favorite_stations) {
                         setFavoriteStations(response.data.favorite_stations);
                     }
                 } catch (error) {
@@ -64,7 +83,10 @@ export const AuthProvider = ({ children }) => {
             
             setToken(access_token);
             setUser(userData);
-            if (userData.favorite_stations) {
+            // Check premium status
+            setIsPremium(userData.subscription_tier === 'premium');
+            // Load favorite stations only for premium users
+            if (userData.subscription_tier === 'premium' && userData.favorite_stations) {
                 setFavoriteStations(userData.favorite_stations);
             }
             localStorage.setItem('token', access_token);
@@ -96,6 +118,7 @@ export const AuthProvider = ({ children }) => {
         setToken(null);
         setUser(null);
         setFavoriteStations([]);
+        setIsPremium(false);
         localStorage.removeItem('token');
         delete axios.defaults.headers.common['Authorization'];
         
@@ -105,6 +128,14 @@ export const AuthProvider = ({ children }) => {
 
     const toggleFavoriteStation = async (stationId) => {
         if (!user) return { success: false, error: 'User not logged in' };
+        
+        // Check if user is premium
+        if (!isPremium) {
+            return { 
+                success: false, 
+                error: 'Favorite stations feature is available only for premium users. Please upgrade your subscription.' 
+            };
+        }
 
         try {
             const isFavorite = favoriteStations.includes(stationId);
@@ -116,6 +147,7 @@ export const AuthProvider = ({ children }) => {
             console.log('- Action:', action);
             console.log('- Current token:', !!token);
             console.log('- Current user:', !!user);
+            console.log('- Is Premium:', isPremium);
             console.log('- Authorization header:', axios.defaults.headers.common['Authorization']);
             
             const response = await axios.post('http://localhost:8000/api/auth/favorites', {
@@ -137,6 +169,15 @@ export const AuthProvider = ({ children }) => {
             console.error('Failed to toggle favorite station:', error);
             console.error('Error response:', error.response?.data);
             console.error('Error status:', error.response?.status);
+            
+            // Handle 403 Forbidden specifically
+            if (error.response?.status === 403) {
+                return { 
+                    success: false, 
+                    error: error.response.data.detail || 'Premium feature - please upgrade your subscription' 
+                };
+            }
+            
             return { success: false, error: error.message };
         }
     };
@@ -149,6 +190,7 @@ export const AuthProvider = ({ children }) => {
         logout,
         loading,
         isAuthenticated: !!user && !!token,
+        isPremium,
         favoriteStations,
         toggleFavoriteStation
     };

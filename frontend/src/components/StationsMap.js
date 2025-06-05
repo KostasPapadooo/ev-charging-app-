@@ -72,7 +72,7 @@ const StationsMap = ({
   onRefresh, 
   onRadiusChange 
 }) => {
-  const { isAuthenticated, favoriteStations, toggleFavoriteStation } = useAuth();
+  const { isAuthenticated, isPremium, favoriteStations, toggleFavoriteStation } = useAuth();
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState('');
   const [radius, setRadius] = useState(currentRadius);
@@ -136,9 +136,15 @@ const StationsMap = ({
       alert('Please log in to mark stations as favorites.');
       return;
     }
+    
+    if (!isPremium) {
+      alert('Favorite stations feature is available only for premium users. Please upgrade your subscription.');
+      return;
+    }
+    
     const result = await toggleFavoriteStation(stationId);
     if (!result.success) {
-      alert('Failed to update favorite status. Please try again.');
+      alert(`Failed to update favorite status: ${result.error || 'Please try again.'}`);
     }
   };
 
@@ -336,7 +342,7 @@ const StationsMap = ({
                     <span className={`status-badge ${station.status?.toLowerCase()}`}>
                       {station.status || 'Unknown'}
                     </span>
-                    {isAuthenticated && (
+                    {isAuthenticated && isPremium && (
                       <button 
                         className="favorite-btn" 
                         onClick={() => handleToggleFavorite(station.tomtom_id)}
@@ -351,6 +357,18 @@ const StationsMap = ({
                       >
                         ♥
                       </button>
+                    )}
+                    {isAuthenticated && !isPremium && (
+                      <span 
+                        style={{ 
+                          marginLeft: '10px',
+                          fontSize: '12px',
+                          color: '#6c757d',
+                          fontStyle: 'italic'
+                        }}
+                      >
+                        Premium feature
+                      </span>
                     )}
                   </div>
 

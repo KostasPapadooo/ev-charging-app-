@@ -187,3 +187,74 @@
 .btn-secondary:hover {
   background: #545b62;
 }
+
+/* Premium upgrade banner */
+.premium-upgrade-banner {
+  background: linear-gradient(135deg, #ffd700, #ffb347);
+  border-radius: 12px;
+  padding: 16px;
+  margin: 20px 0;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+  border: 2px solid #e6c200;
+}
+
+.upgrade-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.upgrade-icon {
+  font-size: 32px;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
+}
+
+.upgrade-text {
+  flex: 1;
+}
+
+.upgrade-text strong {
+  display: block;
+  font-size: 18px;
+  color: #8b4513;
+  margin-bottom: 4px;
+}
+
+.upgrade-text p {
+  margin: 0;
+  color: #8b4513;
+  font-size: 14px;
+  opacity: 0.9;
+}
+
+.upgrade-btn {
+  background: #8b4513;
+  color: #ffd700;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: bold;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.upgrade-btn:hover {
+  background: #a0522d;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+}
+
+@media (max-width: 768px) {
+  .upgrade-content {
+    flex-direction: column;
+    text-align: center;
+    gap: 12px;
+  }
+  
+  .upgrade-btn {
+    width: 100%;
+  }
+}

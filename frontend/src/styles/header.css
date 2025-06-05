@@ -29,3 +29,24 @@
          background-color: #71187e;
      }
 }
+
+.premium-badge {
+    background: linear-gradient(135deg, #ffd700, #ffb347);
+    color: #8b4513;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: bold;
+    margin-left: 8px;
+    text-shadow: 0 1px 1px rgba(255,255,255,0.5);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.free-badge {
+    background: #e9ecef;
+    color: #6c757d;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    margin-left: 8px;
+}

@@ -63,6 +63,10 @@ def verify_password(plain_password, hashed_password):
 def get_password_hash(password):
     return pwd_context.hash(password)
 
+def is_premium_user(current_user: User) -> bool:
+    """Check if user has premium subscription"""
+    return current_user.subscription_tier == "premium"
+
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     """Create JWT access token"""
     to_encode = data.copy()
@@ -251,13 +255,29 @@ async def logout():
     """Logout user - client should handle token removal"""
     return {"message": "Successfully logged out"}
 
+@router.get("/premium-status")
+async def check_premium_status(current_user: User = Depends(get_current_user)):
+    """Check if current user has premium subscription"""
+    return {
+        "is_premium": is_premium_user(current_user),
+        "subscription_tier": current_user.subscription_tier
+    }
+
 @router.post("/favorites", response_model=UserResponse)
 async def update_favorite_station(
     update: FavoriteStationUpdate, 
     current_user: User = Depends(get_current_user)
 ):
-    """Add or remove a station from user's favorites"""
+    """Add or remove a station from user's favorites (Premium users only)"""
     try:
+        # Check if user has premium subscription
+        if current_user.subscription_tier != "premium":
+            logger.warning(f"Non-premium user {current_user.email} attempted to access favorites feature")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Favorite stations feature is available only for premium users"
+            )
+
         user_id = str(current_user.id)
         station_id = update.station_id
         action = update.action

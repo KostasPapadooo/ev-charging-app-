@@ -9,7 +9,7 @@ import '../styles/Dashboard.css';
 const AUTO_REFRESH_INTERVAL = 5000; // ms (5 seconds)
 
 const Dashboard = () => {
-  const { user, isAuthenticated, loading: authLoading } = useAuth();
+  const { user, isAuthenticated, isPremium, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [userLocation, setUserLocation] = useState(null);
   const [locationPermission, setLocationPermission] = useState('prompt');
@@ -272,6 +272,20 @@ const Dashboard = () => {
           <button onClick={handleRetryLocation} className="retry-btn">
             Retry
           </button>
+        </div>
+      )}
+
+      {/* Premium upgrade message for free users */}
+      {!isPremium && (
+        <div className="premium-upgrade-banner">
+          <div className="upgrade-content">
+            <span className="upgrade-icon">👑</span>
+            <div className="upgrade-text">
+              <strong>Upgrade to Premium</strong>
+              <p>Unlock favorite stations and exclusive features!</p>
+            </div>
+            <button className="upgrade-btn">Upgrade Now</button>
+          </div>
         </div>
       )}
 

@@ -25,7 +25,13 @@ function Navigation() {
         <>
           <Link to="/dashboard" className="nav-link">Dashboard</Link>
           <span className="nav-link">
-            Welcome, {user?.first_name} ({user?.subscription_tier})
+            Welcome, {user?.first_name} 
+            {user?.subscription_tier === 'premium' && (
+              <span className="premium-badge">👑 Premium</span>
+            )}
+            {user?.subscription_tier === 'free' && (
+              <span className="free-badge">Free</span>
+            )}
           </span>
           <button onClick={logout} className="logout-button">Logout</button>
         </>
