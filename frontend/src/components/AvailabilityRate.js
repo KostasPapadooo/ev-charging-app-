@@ -19,7 +19,15 @@ const AvailabilityRate = ({ userLocation }) => {
       try {
         setLoading(true);
         const url = `http://localhost:8000/api/stations/analytics/availability-rate?lat=${userLocation.lat}&lon=${userLocation.lon}&radius=3000`;
+        
+        // Debug: Check if we have an auth token
+        const token = localStorage.getItem('token');
+        console.log('Auth token available:', !!token);
+        
         const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
         const data = await response.json();
         if (data.availability_rate !== undefined) {
           // Convert to percentage

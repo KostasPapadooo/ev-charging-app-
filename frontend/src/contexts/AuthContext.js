@@ -109,6 +109,15 @@ export const AuthProvider = ({ children }) => {
         try {
             const isFavorite = favoriteStations.includes(stationId);
             const action = isFavorite ? 'remove' : 'add';
+            
+            // Debug logging
+            console.log('Toggle Favorite Station Debug:');
+            console.log('- Station ID:', stationId);
+            console.log('- Action:', action);
+            console.log('- Current token:', !!token);
+            console.log('- Current user:', !!user);
+            console.log('- Authorization header:', axios.defaults.headers.common['Authorization']);
+            
             const response = await axios.post('http://localhost:8000/api/auth/favorites', {
                 station_id: stationId,
                 action: action
@@ -126,6 +135,8 @@ export const AuthProvider = ({ children }) => {
             return { success: false, error: 'Failed to update favorites' };
         } catch (error) {
             console.error('Failed to toggle favorite station:', error);
+            console.error('Error response:', error.response?.data);
+            console.error('Error status:', error.response?.status);
             return { success: false, error: error.message };
         }
     };
