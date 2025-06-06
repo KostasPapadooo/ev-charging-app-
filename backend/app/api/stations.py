@@ -181,10 +181,11 @@ async def cache_tomtom_stations(tomtom_stations: List[Station]) -> int:
     return cached_count
 
 async def log_location_search(lat: float, lon: float, radius: int, results_count: int, search_type: str):
-    """Log search analytics for optimization"""
+    """Log search analytics for optimization (always valid for analytics schema)"""
     try:
         from app.repositories.analytics_repository import analytics_repository
-        
+        from datetime import datetime
+        now = datetime.utcnow()
         analytics_data = {
             "event_type": "location_search",
             "location": {
@@ -194,11 +195,20 @@ async def log_location_search(lat: float, lon: float, radius: int, results_count
             },
             "results_count": results_count,
             "search_type": search_type,
-            "timestamp": datetime.utcnow()
+            "station_id": "location_search",
+            "date": now.strftime("%Y-%m-%d"),
+            "computed_at": now,
+            "metrics": {
+                "total_sessions": 0,
+                "avg_session_duration": 0.0,
+                "peak_hours": [],
+                "utilization_rate": 0.0,
+                "revenue_eur": 0.0,
+                "unique_users": 0,
+                "busiest_connector_type": None
         }
-        
+        }
         await analytics_repository.log_event(analytics_data)
-        
     except Exception as e:
         logger.error(f"Failed to log analytics: {e}")
         # Don't fail the main request if analytics fails

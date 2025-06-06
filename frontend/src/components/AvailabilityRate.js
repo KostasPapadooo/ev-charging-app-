@@ -6,47 +6,21 @@ import '../styles/Dashboard.css';
 // Register ChartJS components
 ChartJS.register(ArcElement, Tooltip, Legend);
 
-const AvailabilityRate = ({ userLocation, radius = 3000 }) => {
+const AvailabilityRate = ({ stations = [] }) => {
   const [availabilityRate, setAvailabilityRate] = useState(0);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchAvailabilityRate = async () => {
-      if (!userLocation) {
-        setLoading(false);
-        return;
-      }
-      try {
-        setLoading(true);
-        const url = `http://localhost:8000/api/stations/analytics/availability-rate?lat=${userLocation.lat}&lon=${userLocation.lon}&radius=${radius}`;
-        
-        // Debug: Check if we have an auth token
-        const token = localStorage.getItem('token');
-        console.log('Auth token available:', !!token);
-        
-        const response = await fetch(url);
-        if (!response.ok) {
-          throw new Error(`HTTP error! Status: ${response.status}`);
-        }
-        const data = await response.json();
-        if (data.availability_rate !== undefined) {
-          // Convert to percentage
-          setAvailabilityRate(data.availability_rate * 100);
-        } else {
-          setAvailabilityRate(0);
-        }
-        setLoading(false);
-      } catch (error) {
-        console.error('Error fetching availability rate:', error);
-        setLoading(false);
-      }
-    };
+    if (!stations || stations.length === 0) {
+      setAvailabilityRate(0);
+      return;
+    }
 
-    fetchAvailabilityRate();
-    // Set up an interval for periodic updates
-    const interval = setInterval(fetchAvailabilityRate, 30000); // Update every 30 seconds
-    return () => clearInterval(interval);
-  }, [userLocation, radius]);
+    const total = stations.length;
+    const available = stations.filter(s => s.status?.toUpperCase() === 'AVAILABLE').length;
+    const rate = total > 0 ? (available / total) * 100 : 0;
+    
+    setAvailabilityRate(rate);
+  }, [stations]); // Re-calculate when stations array changes
 
   // Gauge chart data
   const data = {
@@ -91,10 +65,6 @@ const AvailabilityRate = ({ userLocation, radius = 3000 }) => {
       ctx.restore();
     },
   };
-
-  if (loading) {
-    return <div className="loading">Loading availability rate...</div>;
-  }
 
   return (
     <div className="availability-rate-container" style={{ textAlign: 'center', marginBottom: '20px' }}>

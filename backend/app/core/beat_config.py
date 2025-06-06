@@ -30,7 +30,7 @@ beat_schedule = {
     **{
         f'update-stations-{location["name"].lower()}': {
             'task': 'app.tasks.batch_tasks.batch_update_stations',
-            'schedule': timedelta(hours=1),  # Run every 1 hour
+            'schedule': timedelta(hours=5),  # Run every 5 hours
             'args': (
                 location["latitude"],
                 location["longitude"],
@@ -53,12 +53,11 @@ beat_schedule = {
         'schedule': timedelta(hours=6),
         'args': ()
     },
-    
-    'poll-station-availability': {
-        'task': 'app.tasks.realtime_tasks.poll_station_availability_new_version',
-        'schedule': timedelta(minutes=5),  # Run every 5 minutes
-        'args': ()
-    }
+
+    "speed_layer_bulk": {
+        "task": "app.tasks.realtime_tasks.poll_station_availability_bulk",
+        "schedule": timedelta(minutes=5),
+    },
 }
 
 # Task Routing

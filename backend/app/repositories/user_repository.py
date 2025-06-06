@@ -166,12 +166,24 @@ class UserRepository(BaseRepository[User]):
             # --- Analytics logging ---
             try:
                 from app.repositories.analytics_repository import analytics_repository
+                from datetime import datetime
+                now = datetime.utcnow()
                 await analytics_repository.log_event({
                     "event_type": "favorite_change",
                     "user_id": str(query_id),
                     "station_id": station_id,
                     "action": action,
-                    "timestamp": datetime.utcnow()
+                    "date": now.strftime("%Y-%m-%d"),
+                    "computed_at": now,
+                    "metrics": {
+                        "total_sessions": 0,
+                        "avg_session_duration": 0.0,
+                        "peak_hours": [],
+                        "utilization_rate": 0.0,
+                        "revenue_eur": 0.0,
+                        "unique_users": 0,
+                        "busiest_connector_type": None
+                    }
                 })
             except Exception as e:
                 logger.warning(f"Failed to log favorite_change event: {e}")

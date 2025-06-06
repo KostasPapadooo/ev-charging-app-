@@ -608,5 +608,25 @@ class TomTomService:
             logger.error(f"Error in get_station_availability for {tomtom_id}: {e}")
             return None
 
+    async def get_bulk_status_by_area(self, lat, lon, radius):
+        """
+        Κάνει bulk fetch status για όλους τους σταθμούς σε μια περιοχή (αν το TomTom API το υποστηρίζει).
+        Επιστρέφει dict {tomtom_id: status}
+        """
+        # Εδώ κάνεις το πραγματικό TomTom API call αν το υποστηρίζει
+        # Για παράδειγμα:
+        # response = await self._http_get(...)
+        # return {s['id']: s['status'] for s in response['results']}
+        # MOCK: Παίρνουμε όλους τους σταθμούς από τη βάση και αλλάζουμε τυχαία status
+        from app.repositories.station_repository import station_repository
+        import random
+        stations = await station_repository.get_all_stations()
+        status_choices = ["AVAILABLE", "BUSY", "OUT_OF_ORDER"]
+        result = {}
+        for s in stations:
+            # Εδώ θα έβαζες το πραγματικό status από το API
+            result[s["tomtom_id"]] = random.choice(status_choices)
+        return result
+
 # Singleton instance
 tomtom_service = TomTomService() 

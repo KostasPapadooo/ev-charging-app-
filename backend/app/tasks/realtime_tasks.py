@@ -6,6 +6,7 @@ from app.repositories.station_repository import station_repository
 from app.repositories.event_repository import event_repository
 from app.services.tomtom_service import tomtom_service
 from app.database.connection import connect_to_mongo
+from app.core.socket_io import sio
 
 logger = logging.getLogger(__name__)
 
@@ -89,4 +90,67 @@ async def _async_poll_and_log_events():
             logger.error(f"[Speed Layer] Error updating/checking station {tomtom_id}: {str(e)}")
             continue
     logger.info(f"[Speed Layer] Poll finished. Updated: {updated_count}, Events created: {event_count}")
-    return {"status": "success", "updated": updated_count, "events": event_count} 
+    return {"status": "success", "updated": updated_count, "events": event_count}
+
+@celery_app.task(
+    name="app.tasks.realtime_tasks.poll_station_availability_bulk",
+    queue="realtime_queue",
+    retry_backoff=True,
+    retry_jitter=True,
+    retry_max_delay=300,
+    max_retries=3,
+    bind=True
+)
+def poll_station_availability_bulk(self):
+    """
+    Speed layer: κάνει 1 bulk call για status και ενημερώνει μόνο όσα άλλαξαν. Κάνει broadcast μέσω WebSocket.
+    """
+    try:
+        logger.info("[Speed Layer] Starting bulk real-time availability poll")
+        loop = asyncio.get_event_loop()
+        if loop.is_closed():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        result = loop.run_until_complete(_async_bulk_poll_and_broadcast())
+        return result
+    except Exception as e:
+        logger.error(f"Error in poll_station_availability_bulk: {str(e)}")
+        raise self.retry(exc=e)
+
+async def _async_bulk_poll_and_broadcast():
+    await connect_to_mongo()
+    await station_repository.initialize()
+    stations = await station_repository.get_all_stations()
+    if not stations:
+        logger.info("[Speed Layer] No stations found to check for availability.")
+        return {"status": "success", "message": "No stations to check."}
+    logger.info(f"[Speed Layer] Found {len(stations)} stations to check.")
+    # Παίρνουμε το bulk status (mock ή πραγματικό)
+    # Χρησιμοποιούμε το κέντρο της Αθήνας και μεγάλο radius για παράδειγμα
+    lat, lon, radius = 37.9838, 23.7275, 50000
+    bulk_status = await tomtom_service.get_bulk_status_by_area(lat, lon, radius)
+    changed_stations = []
+    updated_count = 0
+    for station in stations:
+        tomtom_id = station.get("tomtom_id")
+        if not tomtom_id:
+            continue
+        old_status = station.get("status", "UNKNOWN")
+        new_status = bulk_status.get(tomtom_id, old_status)
+        if old_status != new_status:
+            await station_repository.update_station_status(
+                tomtom_id,
+                new_status,
+                {"last_updated": datetime.utcnow()}
+            )
+            changed_stations.append({
+                "station_id": tomtom_id,
+                "old_status": old_status,
+                "new_status": new_status
+            })
+            updated_count += 1
+    if changed_stations:
+        logger.info(f"[Speed Layer] Broadcasting {len(changed_stations)} status changes via WebSocket")
+        sio.emit('status_update', {"stations": changed_stations})
+    logger.info(f"[Speed Layer] Bulk poll finished. Updated: {updated_count}")
+    return {"status": "success", "updated": updated_count, "changed": len(changed_stations)} 

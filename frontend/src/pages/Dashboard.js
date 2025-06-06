@@ -5,8 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import StationsMap from '../components/StationsMap';
 import AvailabilityRate from '../components/AvailabilityRate';
 import '../styles/Dashboard.css';
-
-const AUTO_REFRESH_INTERVAL = 5000; // ms (5 seconds)
+import { io } from 'socket.io-client';
 
 const Dashboard = () => {
   const { user, isAuthenticated, isPremium, loading: authLoading } = useAuth();
@@ -20,6 +19,7 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [currentRadius, setCurrentRadius] = useState(500); // Αρχική ακτίνα 500m
   const intervalRef = useRef(null);
+  const socketRef = useRef(null);
 
   // Redirect to home if not authenticated
   useEffect(() => {
@@ -125,21 +125,37 @@ const Dashboard = () => {
     }
   }, [fetchStations]);
 
-  // Auto-refresh effect (only update stats, not map)
+  // WebSocket integration
   useEffect(() => {
-    if (!userLocation) return;
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-    }
-    intervalRef.current = setInterval(() => {
-      fetchStations(userLocation.lat, userLocation.lon, currentRadius, false); // false: no loading, no map update
-    }, AUTO_REFRESH_INTERVAL);
+    socketRef.current = io('http://localhost:8000'); // ή όπου τρέχει το backend σου
+    socketRef.current.on('status_update', (data) => {
+      // data.stations = [{station_id, old_status, new_status}]
+      setStations((prevStations) => {
+        if (!data.stations) return prevStations;
+        // Κάνε merge τα νέα status στα stations
+        return prevStations.map(station => {
+          const found = data.stations.find(s => s.station_id === station.tomtom_id);
+          if (found) {
+            return { ...station, status: found.new_status };
+          }
+          return station;
+        });
+      });
+      setDisplayStations((prevStations) => {
+        if (!data.stations) return prevStations;
+        return prevStations.map(station => {
+          const found = data.stations.find(s => s.station_id === station.tomtom_id);
+          if (found) {
+            return { ...station, status: found.new_status };
+          }
+          return station;
+        });
+      });
+    });
     return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
+      socketRef.current.disconnect();
     };
-  }, [userLocation, currentRadius, fetchStations]);
+  }, []);
 
   // On first load or manual refresh, update both stats and map
   useEffect(() => {
@@ -318,7 +334,7 @@ const Dashboard = () => {
       </div>
       
       {/* Availability Rate Visualization */}
-      <AvailabilityRate userLocation={userLocation} radius={currentRadius} />
+      <AvailabilityRate stations={stations} />
       
       <StationsMap 
         userLocation={userLocation}

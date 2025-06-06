@@ -41,17 +41,36 @@ class AnalyticsRepository:
         except Exception as e:
             logger.error(f"Error creating analytics indexes: {e}")
 
+    async def _make_valid_analytics_doc(self, event_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Ensure all required fields for analytics schema are present."""
+        doc = dict(event_data)
+        now = datetime.utcnow()
+        # Required fields for analytics schema
+        doc.setdefault("station_id", doc.get("station_id", "unknown"))
+        doc.setdefault("date", now.strftime("%Y-%m-%d"))
+        doc.setdefault("computed_at", now)
+        # Minimal metrics for non-daily analytics
+        if "metrics" not in doc:
+            doc["metrics"] = {
+                "total_sessions": 0,
+                "avg_session_duration": 0.0,
+                "peak_hours": [],
+                "utilization_rate": 0.0,
+                "revenue_eur": 0.0,
+                "unique_users": 0,
+                "busiest_connector_type": None
+            }
+        return doc
+
     async def log_event(self, event_data: Dict[str, Any]) -> bool:
-        """Log analytics event"""
+        """Log analytics event (always valid for analytics schema)"""
         try:
-            event_doc = {
+            event_doc = await self._make_valid_analytics_doc({
                 **event_data,
                 "timestamp": datetime.utcnow()
-            }
-            
+            })
             await self.collection.insert_one(event_doc)
             return True
-            
         except Exception as e:
             logger.error(f"Error logging analytics event: {e}")
             return False

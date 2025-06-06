@@ -7,6 +7,7 @@ from datetime import datetime
 from contextlib import asynccontextmanager
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
+import socketio
 
 from app.core.config import settings
 from app.database.connection import connect_to_mongo, close_mongo_connection
@@ -18,6 +19,9 @@ from app.models.event import Event
 from app.models.station import Station, StationLocation, ConnectorInfo, OperatorInfo
 from app.api import stations  # Βεβαιωθείτε ότι αυτό υπάρχει
 from app.api.auth import router as auth_router
+# Import celery tasks
+from app.tasks.realtime_tasks import poll_station_availability_bulk
+from app.tasks.batch_tasks import batch_update_stations
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -25,51 +29,6 @@ logger = logging.getLogger(__name__)
 
 # Global scheduler
 scheduler = AsyncIOScheduler()
-
-async def update_stations_availability():
-    """Ενημερώνει τη διαθεσιμότητα όλων των σταθμών"""
-    try:
-        from app.repositories.station_repository import station_repository
-        from app.services.tomtom_service import tomtom_service
-        
-        # Παίρνουμε όλους τους σταθμούς από τη βάση
-        stations = await station_repository.get_all_stations()
-        
-        logger.info(f"🔄 Starting availability update for {len(stations)} stations")
-        
-        updated_count = 0
-        for station in stations[:5]:  # Πρώτα 5 για τεστ
-            try:
-                # Καλούμε το TomTom API για fresh data
-                lat = station["location"]["coordinates"][1]
-                lon = station["location"]["coordinates"][0]
-                
-                fresh_stations = await tomtom_service.get_stations_in_area(lat, lon, 1000)
-                
-                # Βρίσκουμε τον αντίστοιχο σταθμό
-                for fresh_station in fresh_stations:
-                    if fresh_station.tomtom_id == station["tomtom_id"]:
-                        # Ενημερώνουμε το status μόνο αν άλλαξε
-                        old_status = station.get("status", "UNKNOWN")
-                        new_status = fresh_station.status
-                        
-                        if new_status != old_status:
-                            await station_repository.update_station_status(
-                                station["tomtom_id"],
-                                new_status
-                            )
-                            updated_count += 1
-                            logger.info(f"📍 Updated {station['name']}: {old_status} → {new_status}")
-                        break
-                        
-            except Exception as e:
-                logger.error(f"❌ Error updating station {station.get('tomtom_id')}: {e}")
-                continue
-        
-        logger.info(f"✅ Updated availability for {updated_count} stations")
-        
-    except Exception as e:
-        logger.error(f"❌ Error updating stations availability: {e}")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -79,19 +38,44 @@ async def lifespan(app: FastAPI):
     from app.repositories import init_repositories
     await init_repositories()  # Make it async
     
+    # Get Athens config from settings
+    athens_lat = settings.ATHENS_CENTER_LAT
+    athens_lon = settings.ATHENS_CENTER_LON
+    athens_radius = settings.ATHENS_RADIUS_METERS
+    athens_city_name = settings.ATHENS_CITY_NAME
+    
     # Ξεκινάμε τον scheduler ΜΕΤΑ την αρχικοποίηση
     try:
+        # Schedule Speed Layer task (every 5 minutes)
         scheduler.add_job(
-            update_stations_availability,
+            lambda: poll_station_availability_bulk.delay(),
             IntervalTrigger(minutes=5),
-            id="update_availability"
+            id="speed_layer_bulk_poll",
+            name="Real-time availability bulk poll (Speed Layer)",
+            replace_existing=True
         )
+        logger.info("🚀 Speed Layer (bulk poll) scheduler started - runs every 5 minutes")
+        
+        # Schedule Batch Layer task for Athens (every 5 hours)
+        scheduler.add_job(
+            lambda: batch_update_stations.delay(
+                latitude=athens_lat,
+                longitude=athens_lon,
+                radius=athens_radius,
+                city_name=athens_city_name
+            ),
+            IntervalTrigger(hours=5),
+            id="batch_layer_update_athens",
+            name="Batch station update for Athens (Batch Layer)",
+            replace_existing=True
+        )
+        logger.info("🚀 Batch Layer (Athens) scheduler started - runs every 5 hours")
+        
         scheduler.start()
-        logger.info("🚀 Availability update scheduler started - updates every 5 minutes")
         
         # Τρέχουμε μια φορά αμέσως για να δούμε αποτελέσματα
-        logger.info("🔄 Running initial availability update...")
-        await update_stations_availability()
+        logger.info("🔄 Running initial Speed Layer update...")
+        poll_station_availability_bulk.delay()
         
     except Exception as e:
         logger.error(f"❌ Failed to start scheduler: {e}")
@@ -128,6 +112,24 @@ if settings.cors_origins:
 # Include routers
 app.include_router(stations.router, prefix="/api/stations", tags=["stations"])
 app.include_router(auth_router, prefix="/api/auth", tags=["authentication"])
+
+# Import the centralized SIO instance
+from app.core.socket_io import sio
+
+# Create the ASGI app
+socket_io_app = socketio.ASGIApp(sio)
+app.mount("/socket.io", socket_io_app)
+
+logger.info('Socket.IO server mounted at /socket.io')
+
+@sio.event
+async def connect(sid, environ):
+    logger.info(f'Client connected: {sid}')
+    await sio.emit('connection_response', {'message': 'Connected to server'}, room=sid)
+
+@sio.event
+async def disconnect(sid):
+    logger.info(f'Client disconnected: {sid}')
 
 @app.get("/")
 async def root():
