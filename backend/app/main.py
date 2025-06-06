@@ -17,7 +17,7 @@ from app.repositories import repositories
 from app.models.user import User, UserPreferences
 from app.models.event import Event
 from app.models.station import Station, StationLocation, ConnectorInfo, OperatorInfo
-from app.api import stations  # Βεβαιωθείτε ότι αυτό υπάρχει
+from app.api import stations
 from app.api.auth import router as auth_router
 # Import celery tasks
 from app.tasks.realtime_tasks import poll_station_availability_bulk
@@ -92,46 +92,63 @@ async def lifespan(app: FastAPI):
     await tomtom_service.close()
     logger.info("Application shutdown complete")
 
-app = FastAPI(
+# --- Application Setup ---
+
+# 1. Create the FastAPI instance without the lifespan context initially
+fastapi_app = FastAPI(
     title=settings.app_name,
     description="API for managing EV charging stations with real-time notifications",
-    version="1.0.0",
-    lifespan=lifespan
+    version="1.0.0"
 )
 
-# CORS middleware
-if settings.cors_origins:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=settings.cors_origins,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+# 2. Re-add the CORSMiddleware to the FastAPI app.
+# This will handle CORS for the REST API endpoints.
+fastapi_app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# Include routers
-app.include_router(stations.router, prefix="/api/stations", tags=["stations"])
-app.include_router(auth_router, prefix="/api/auth", tags=["authentication"])
+# 3. Initialize Socket.IO server WITH its OWN CORS enabled.
+# This will handle CORS for WebSocket transport requests.
+mgr = socketio.AsyncRedisManager(settings.redis_url)
+sio = socketio.AsyncServer(
+    async_mode="asgi",
+    client_manager=mgr,
+    cors_allowed_origins=settings.cors_origins
+)
 
-# Import the centralized SIO instance
-from app.core.socket_io import sio
+# 4. Wrap the FastAPI app with the Socket.IO app.
+# This makes Socket.IO the main entry point.
+socket_io_app = socketio.ASGIApp(sio, other_asgi_app=fastapi_app)
 
-# Create the ASGI app
-socket_io_app = socketio.ASGIApp(sio)
-app.mount("/socket.io", socket_io_app)
+# 5. Add the lifespan context manager to the main wrapped app
+# This ensures startup/shutdown events still run for the FastAPI part.
+fastapi_app.router.lifespan_context = lifespan
 
-logger.info('Socket.IO server mounted at /socket.io')
+# 6. Include API routers on the FastAPI instance
+fastapi_app.include_router(stations.router, prefix="/api/stations", tags=["stations"])
+fastapi_app.include_router(auth_router, prefix="/api/auth", tags=["authentication"])
+
+
+# --- Socket.IO Event Handlers ---
 
 @sio.event
 async def connect(sid, environ):
     logger.info(f'Client connected: {sid}')
+    # Log the received headers for debugging
+    logger.debug(f"Connection headers: {environ.get('asgi.scope', {}).get('headers', [])}")
     await sio.emit('connection_response', {'message': 'Connected to server'}, room=sid)
 
 @sio.event
 async def disconnect(sid):
     logger.info(f'Client disconnected: {sid}')
 
-@app.get("/")
+# --- Health Check Endpoints on the FastAPI instance ---
+
+@fastapi_app.get("/")
 async def root():
     """Health check endpoint"""
     return {
@@ -140,12 +157,14 @@ async def root():
         "version": "1.0.0"
     }
 
-@app.get("/health")
+@fastapi_app.get("/health")
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "timestamp": datetime.utcnow()}
 
-@app.get("/test/tomtom")
+# --- Test Endpoints on the FastAPI instance ---
+
+@fastapi_app.get("/test/tomtom")
 async def test_tomtom_api(lat: float = 37.9755, lon: float = 23.7348, radius: int = 5000):
     """
     Test endpoint for TomTom API integration
@@ -211,7 +230,7 @@ async def test_tomtom_api(lat: float = 37.9755, lon: float = 23.7348, radius: in
             }
         )
 
-@app.get("/test/tomtom/raw")
+@fastapi_app.get("/test/tomtom/raw")
 async def test_tomtom_raw(lat: float = 37.9755, lon: float = 23.7348, radius: int = 5000):
     """
     Test endpoint to see raw TomTom API response
@@ -239,7 +258,7 @@ async def test_tomtom_raw(lat: float = 37.9755, lon: float = 23.7348, radius: in
             }
         )
 
-@app.get("/test/repositories")
+@fastapi_app.get("/test/repositories")
 async def test_repositories():
     """Test repository functionality"""
     try:
@@ -301,7 +320,7 @@ async def test_repositories():
             }
         )
 
-@app.get("/test/station-operations")
+@fastapi_app.get("/test/station-operations")
 async def test_station_operations():
     """Test station operations"""
     try:
@@ -364,7 +383,7 @@ async def test_station_operations():
             detail=f"Error in station operations test: {str(e)}"
         )
 
-@app.get("/test/historical-save")
+@fastapi_app.get("/test/historical-save")
 async def test_historical_save():
     from app.repositories import historical_repo
     from app.models.station import Station, StationLocation, ConnectorInfo, OperatorInfo
@@ -414,7 +433,7 @@ async def test_historical_save():
         "saved_id": str(saved_id)
     }
 
-@app.get("/batch/update-stations")
+@fastapi_app.get("/batch/update-stations")
 async def trigger_batch_update_stations(
     lat: float = 37.9755,  # Κέντρο Αθήνας
     lon: float = 23.7348,
@@ -443,9 +462,10 @@ async def trigger_batch_update_stations(
             detail=f"Error triggering batch update: {str(e)}"
         )
 
+# --- Main execution ---
 if __name__ == "__main__":
     uvicorn.run(
-        "main:app",
+        "main:socket_io_app",  # Run the wrapped Socket.IO app
         host="0.0.0.0",
         port=8000,
         reload=True,

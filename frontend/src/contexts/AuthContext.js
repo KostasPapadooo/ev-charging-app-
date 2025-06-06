@@ -35,7 +35,7 @@ export const AuthProvider = ({ children }) => {
         }
         
         try {
-            const response = await axios.get('http://localhost:8000/api/auth/premium-status');
+            const response = await axios.get('http://127.0.0.1:8000/api/auth/premium-status');
             setIsPremium(response.data.is_premium);
         } catch (error) {
             console.error('Failed to check premium status:', error);
@@ -48,7 +48,7 @@ export const AuthProvider = ({ children }) => {
         const checkAuth = async () => {
             if (token) {
                 try {
-                    const response = await axios.get('http://localhost:8000/api/auth/me');
+                    const response = await axios.get('http://127.0.0.1:8000/api/auth/me');
                     setUser(response.data);
                     // Check premium status
                     setIsPremium(response.data.subscription_tier === 'premium');
@@ -73,7 +73,7 @@ export const AuthProvider = ({ children }) => {
             params.append('username', email);
             params.append('password', password);
 
-            const response = await axios.post('http://localhost:8000/api/auth/login', params, {
+            const response = await axios.post('http://127.0.0.1:8000/api/auth/login', params, {
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded'
                 }
@@ -103,7 +103,7 @@ export const AuthProvider = ({ children }) => {
 
     const register = async (userData) => {
         try {
-            const response = await axios.post('http://localhost:8000/api/auth/register', userData);
+            const response = await axios.post('http://127.0.0.1:8000/api/auth/register', userData);
             return { success: true, user: response.data };
         } catch (error) {
             console.error('Registration failed:', error);
@@ -150,7 +150,7 @@ export const AuthProvider = ({ children }) => {
             console.log('- Is Premium:', isPremium);
             console.log('- Authorization header:', axios.defaults.headers.common['Authorization']);
             
-            const response = await axios.post('http://localhost:8000/api/auth/favorites', {
+            const response = await axios.post('http://127.0.0.1:8000/api/auth/favorites', {
                 station_id: stationId,
                 action: action
             });

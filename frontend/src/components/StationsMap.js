@@ -69,18 +69,11 @@ const StationsMap = ({
   locationPermission, 
   stations = [], 
   currentRadius = 500,
-  onRefresh, 
   onRadiusChange 
 }) => {
   const { isAuthenticated, isPremium, favoriteStations, toggleFavoriteStation } = useAuth();
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState('');
-  const [radius, setRadius] = useState(currentRadius);
-
-  // Update local radius when currentRadius prop changes
-  useEffect(() => {
-    setRadius(currentRadius);
-  }, [currentRadius]);
 
   const loadNearbyStations = useCallback(async (lat, lon) => {
     if (!lat || !lon) return;
@@ -112,20 +105,11 @@ const StationsMap = ({
     return station.status?.toLowerCase() === filter.toLowerCase();
   });
 
-  const handleRefresh = () => {
-    console.log(`StationsMap: Refreshing with current radius ${radius}m`);
-    if (onRefresh) {
-      onRefresh(radius);
-    }
-  };
-
   const handleFilterChange = (newFilter) => {
     setFilter(newFilter);
   };
 
   const handleRadiusChange = (newRadius) => {
-    console.log(`StationsMap: Radius changed from ${radius}m to ${newRadius}m`);
-    setRadius(newRadius);
     if (onRadiusChange) {
       onRadiusChange(newRadius);
     }
@@ -220,7 +204,7 @@ const StationsMap = ({
           <div className="filter-section">
             <select 
               className="radius-filter"
-              value={radius}
+              value={currentRadius}
               onChange={(e) => handleRadiusChange(parseInt(e.target.value))}
             >
               <option value={500}>500m radius</option>
@@ -271,7 +255,7 @@ const StationsMap = ({
       {/* Search Info */}
       <div className="search-info">
         <p>
-          Showing {filteredStations.length} stations within {radius}m 
+          Showing {filteredStations.length} stations within {currentRadius}m 
           {filter && ` (filtered by: ${filter})`}
         </p>
       </div>
@@ -288,7 +272,7 @@ const StationsMap = ({
         
         <MapContainer
           center={[userLocation.lat, userLocation.lon]}
-          zoom={radius <= 500 ? 16 : radius <= 1000 ? 15 : radius <= 2000 ? 14 : radius <= 5000 ? 13 : 12}
+          zoom={currentRadius <= 500 ? 16 : currentRadius <= 1000 ? 15 : currentRadius <= 2000 ? 14 : currentRadius <= 5000 ? 13 : 12}
           className="stations-map"
           style={{ height: '500px', width: '100%' }}
         >
@@ -314,7 +298,7 @@ const StationsMap = ({
           {/* Search radius circle */}
           <Circle
             center={[userLocation.lat, userLocation.lon]}
-            radius={radius}
+            radius={currentRadius}
             pathOptions={{
               color: '#007bff',
               fillColor: '#007bff',

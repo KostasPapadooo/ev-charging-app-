@@ -2,13 +2,20 @@ from app.core.celery_config.celery_app import celery_app
 import logging
 from datetime import datetime
 import asyncio
+import socketio
+from app.core.config import settings
 from app.repositories.station_repository import station_repository
 from app.repositories.event_repository import event_repository
 from app.services.tomtom_service import tomtom_service
 from app.database.connection import connect_to_mongo
-from app.core.socket_io import sio
 
 logger = logging.getLogger(__name__)
+
+# Create a 'write-only' async client to allow Celery to publish events through Redis.
+# This client connects to the Redis message queue.
+sio_celery = socketio.AsyncServer(
+    client_manager=socketio.AsyncRedisManager(settings.redis_url)
+)
 
 @celery_app.task(
     name="app.tasks.realtime_tasks.poll_station_availability_new_version",
@@ -151,6 +158,7 @@ async def _async_bulk_poll_and_broadcast():
             updated_count += 1
     if changed_stations:
         logger.info(f"[Speed Layer] Broadcasting {len(changed_stations)} status changes via WebSocket")
-        sio.emit('status_update', {"stations": changed_stations})
+        # FIX: Use the async server instance and `await` the emit call.
+        await sio_celery.emit('status_update', {"stations": changed_stations})
     logger.info(f"[Speed Layer] Bulk poll finished. Updated: {updated_count}")
     return {"status": "success", "updated": updated_count, "changed": len(changed_stations)} 

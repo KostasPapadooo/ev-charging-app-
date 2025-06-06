@@ -14,11 +14,9 @@ const Dashboard = () => {
   const [locationPermission, setLocationPermission] = useState('prompt');
   const [locationError, setLocationError] = useState(null);
   const [showLocationModal, setShowLocationModal] = useState(false);
-  const [stations, setStations] = useState([]);
-  const [displayStations, setDisplayStations] = useState([]); // For map
+  const [stations, setStations] = useState([]); // Single source of truth for stations
   const [loading, setLoading] = useState(true);
-  const [currentRadius, setCurrentRadius] = useState(500); // Αρχική ακτίνα 500m
-  const intervalRef = useRef(null);
+  const [currentRadius, setCurrentRadius] = useState(500);
   const socketRef = useRef(null);
 
   // Redirect to home if not authenticated
@@ -28,29 +26,26 @@ const Dashboard = () => {
     }
   }, [isAuthenticated, authLoading, navigate]);
 
-  // Fetch stations data with specific radius
-  const fetchStations = useCallback(async (lat, lon, radius = 500, showLoading = true) => {
+  // Unified function to fetch stations data
+  const fetchStations = useCallback(async (lat, lon, radius, showLoading = true) => {
+    if (showLoading) setLoading(true);
     try {
-      if (showLoading) setLoading(true);
       const response = await fetch(
-        `http://localhost:8000/api/stations/nearby/search?lat=${lat}&lon=${lon}&radius=${radius}&limit=1000`
+        `http://127.0.0.1:8000/api/stations/nearby/search?lat=${lat}&lon=${lon}&radius=${radius}&limit=1000`
       );
       const data = await response.json();
-      setStations(data.stations || []); // Always update for stats
-      if (showLoading) {
-        setDisplayStations(data.stations || []); // Only update map on manual fetch
-      }
+      console.log(`[DEBUG] Fetched ${data.stations?.length || 0} stations for radius ${radius}m:`, data.stations);
+      setStations(data.stations || []); // Always update the single source of truth
       setCurrentRadius(radius);
-      if (showLoading) setLoading(false);
     } catch (error) {
       console.error('Error fetching stations:', error);
       setStations([]);
-      if (showLoading) setDisplayStations([]);
+    } finally {
       if (showLoading) setLoading(false);
     }
   }, []);
 
-  // Get status counts from actual stations data
+  // Get status counts from the single source of truth
   const getStatusCounts = (stations) => {
     const counts = {
       total: stations.length,
@@ -83,8 +78,8 @@ const Dashboard = () => {
 
     return counts;
   };
-
-  const getCurrentLocationAndProceed = useCallback(() => {
+  
+  const getCurrentLocationAndProceed = useCallback((radius = 500) => {
     if (navigator.geolocation) {
       setLocationPermission('requesting');
       navigator.geolocation.getCurrentPosition(
@@ -98,87 +93,93 @@ const Dashboard = () => {
           setLocationPermission('granted');
           setLocationError(null);
           setShowLocationModal(false);
-          
-          // Fetch stations with initial 500m radius
-          fetchStations(location.lat, location.lon, 500);
+          fetchStations(location.lat, location.lon, radius);
         },
         (error) => {
           console.error('Geolocation error:', error);
           setLocationError(`Location error: ${error.message}`);
           setLocationPermission('denied');
-          
-          // Use default location (Athens center)
           const defaultLocation = { lat: 37.9838, lon: 23.7275 };
           setUserLocation(defaultLocation);
-          fetchStations(defaultLocation.lat, defaultLocation.lon, 500);
+          fetchStations(defaultLocation.lat, defaultLocation.lon, radius);
         },
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
       );
     } else {
       setLocationError('Geolocation is not supported by this browser.');
       setLocationPermission('denied');
-      
-      // Use default location
       const defaultLocation = { lat: 37.9838, lon: 23.7275 };
       setUserLocation(defaultLocation);
-      fetchStations(defaultLocation.lat, defaultLocation.lon, 500);
+      fetchStations(defaultLocation.lat, defaultLocation.lon, radius);
     }
   }, [fetchStations]);
 
   // WebSocket integration
   useEffect(() => {
-    socketRef.current = io('http://localhost:8000'); // ή όπου τρέχει το backend σου
+    // With the new backend architecture, Socket.IO is the main entry point.
+    // We can connect directly without specifying a path, as it's now at the root.
+    const socket = io('http://127.0.0.1:8000');
+
+    socket.on('connect', () => {
+      console.log('Successfully connected to WebSocket server!');
+    });
+
+    socket.on('connection_response', (data) => {
+      console.log('Server says:', data.message);
+    });
+
+    socket.on('connect_error', (err) => {
+      console.error('WebSocket connection error:', err.message);
+    });
+
+    socketRef.current = socket;
+
+    // Listen for status updates
     socketRef.current.on('status_update', (data) => {
-      // data.stations = [{station_id, old_status, new_status}]
+      if (!data || !data.stations) return;
+
       setStations((prevStations) => {
-        if (!data.stations) return prevStations;
-        // Κάνε merge τα νέα status στα stations
+        // Create a map for quick lookups
+        const updatesMap = new Map(data.stations.map(s => [s.station_id, s.new_status]));
+        
+        // Return a new array with updated statuses
         return prevStations.map(station => {
-          const found = data.stations.find(s => s.station_id === station.tomtom_id);
-          if (found) {
-            return { ...station, status: found.new_status };
-          }
-          return station;
-        });
-      });
-      setDisplayStations((prevStations) => {
-        if (!data.stations) return prevStations;
-        return prevStations.map(station => {
-          const found = data.stations.find(s => s.station_id === station.tomtom_id);
-          if (found) {
-            return { ...station, status: found.new_status };
+          if (updatesMap.has(station.tomtom_id)) {
+            return { ...station, status: updatesMap.get(station.tomtom_id) };
           }
           return station;
         });
       });
     });
-    return () => {
-      socketRef.current.disconnect();
-    };
-  }, []);
 
-  // On first load or manual refresh, update both stats and map
+    // Disconnect on cleanup
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
+    };
+  }, []); // Empty dependency array ensures this runs only once
+
+  // Initial load effect
   useEffect(() => {
     if (isAuthenticated && user) {
       getCurrentLocationAndProceed();
     }
-  }, [getCurrentLocationAndProceed, isAuthenticated, user]);
+  }, [isAuthenticated, user, getCurrentLocationAndProceed]);
 
-  const handleLocationRequest = async () => {
-      setShowLocationModal(false);
-      await getCurrentLocationAndProceed();
+
+  const handleLocationRequest = () => {
+    setShowLocationModal(false);
+    getCurrentLocationAndProceed();
   };
 
-  const handleLocationDenied = async () => {
+  const handleLocationDenied = () => {
     setShowLocationModal(false);
     setLocationPermission('denied');
-    
-    // Use default location
     const defaultLocation = { lat: 37.9838, lon: 23.7275, accuracy: null };
     setUserLocation(defaultLocation);
-    await fetchStations(defaultLocation.lat, defaultLocation.lon, 500);
+    fetchStations(defaultLocation.lat, defaultLocation.lon, 500);
     setLoading(false);
-    
     setLocationError('Location access denied. Using Athens center as default.');
   };
 
@@ -188,18 +189,10 @@ const Dashboard = () => {
     setShowLocationModal(true);
   };
 
-  // Manual refresh function with radius parameter
-  const handleRefresh = useCallback((newRadius) => {
-    if (userLocation) {
-      const radiusToUse = newRadius || currentRadius;
-      fetchStations(userLocation.lat, userLocation.lon, radiusToUse, true); // true: update map and stats
-    }
-  }, [userLocation, currentRadius, fetchStations]);
-
-  // Handle radius change from StationsMap
+  // Callback for when the radius is changed in the map component
   const handleRadiusChange = useCallback((newRadius) => {
     if (userLocation) {
-      fetchStations(userLocation.lat, userLocation.lon, newRadius, true); // true: update map and stats
+      fetchStations(userLocation.lat, userLocation.lon, newRadius, true);
     }
   }, [userLocation, fetchStations]);
 
@@ -220,8 +213,8 @@ const Dashboard = () => {
   if (!isAuthenticated || !user) {
     return null;
   }
-
-  // Show loading state
+  
+  // Show main loading state for station fetching
   if (loading) {
     return (
       <div className="dashboard-container">
@@ -231,10 +224,9 @@ const Dashboard = () => {
             Real-time monitoring of electric vehicle charging stations
           </p>
         </div>
-        
         <div className="loading-overlay">
           <div className="loading-spinner">
-            Loading stations ...
+            Finding nearby stations...
           </div>
         </div>
       </div>
@@ -271,7 +263,7 @@ const Dashboard = () => {
   }
 
   // Main dashboard view
-  const statusCounts = getStatusCounts(stations); // Use live stations for cards
+  const statusCounts = getStatusCounts(stations);
 
   return (
     <div className="dashboard-container">
@@ -291,7 +283,6 @@ const Dashboard = () => {
         </div>
       )}
 
-      {/* Premium upgrade message for free users */}
       {!isPremium && (
         <div className="premium-upgrade-banner">
           <div className="upgrade-content">
@@ -305,7 +296,6 @@ const Dashboard = () => {
         </div>
       )}
 
-      {/* Search radius info */}
       <div className="search-radius-info">
         <p>Showing stations within <strong>{currentRadius}m</strong> from your location</p>
       </div>
@@ -333,16 +323,14 @@ const Dashboard = () => {
         </div>
       </div>
       
-      {/* Availability Rate Visualization */}
       <AvailabilityRate stations={stations} />
       
       <StationsMap 
         userLocation={userLocation}
         locationPermission={locationPermission}
-        stations={displayStations} // Only update map on manual fetch
+        stations={stations} // Pass the single source of truth
         currentRadius={currentRadius}
-        onRefresh={handleRefresh}
-        onRadiusChange={handleRadiusChange}
+        onRadiusChange={handleRadiusChange} // Pass the handler
       />
     </div>
   );

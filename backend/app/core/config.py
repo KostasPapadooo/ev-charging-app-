@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     tomtom_base_url: str = "https://api.tomtom.com"
     
     # CORS settings
-    cors_origins: List[str] = ["http://localhost:3000"]
+    cors_origins: List[str] = ["http://localhost:3000", "http://127.0.0.1:8000"]
     
     # JWT settings
     secret_key: str
