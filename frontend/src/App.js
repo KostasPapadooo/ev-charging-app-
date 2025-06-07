@@ -1,6 +1,6 @@
 // frontend/src/App.js
 import React from 'react';
-import { BrowserRouter as Router, Route, Routes, Link } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, Link, useLocation } from 'react-router-dom';
 // import logo from './logo.svg'; // Αφαιρέθηκε το logo προς το παρόν
 import './App.css';
 import './styles/header.css';
@@ -9,6 +9,7 @@ import Register from './pages/Register';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import HomePage from './pages/HomePage';
+import Footer from './components/Footer';
 import './styles/Dashboard.css';
 
 function Navigation() {
@@ -41,18 +42,30 @@ function Navigation() {
   );
 }
 
+function AppContent() {
+  const location = useLocation();
+  const showFooter = location.pathname === '/' || location.pathname === '/dashboard';
+
+  return (
+    <>
+      <Navigation />
+      <Routes>
+        <Route path="/register" element={<Register />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/" element={<HomePage />} />
+      </Routes>
+      {showFooter && <Footer />}
+    </>
+  );
+}
+
 function App() {
   return (
     <AuthProvider>
       <Router>
         <div className="App">
-          <Navigation />
-          <Routes>
-            <Route path="/register" element={<Register />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/" element={<HomePage />} />
-          </Routes>
+          <AppContent />
         </div>
       </Router>
     </AuthProvider>
