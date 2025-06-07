@@ -199,5 +199,26 @@ class UserRepository(BaseRepository[User]):
             logger.error(f"Error updating favorite station for user {user_id}: {e}")
             raise
 
+    async def find_premium_users_by_favorite_station(self, station_id: str) -> List[User]:
+        """Find all premium users who have a specific station in their favorites."""
+        try:
+            query = {
+                "favorite_stations": station_id,
+                "subscription_tier": "premium",
+                "is_active": True
+            }
+            users_cursor = self.collection.find(query)
+            users = await users_cursor.to_list(length=None)  # Get all matching users
+            
+            if users:
+                logger.info(f"Found {len(users)} premium user(s) favoriting station {station_id}")
+                return [self.model_class(**user_doc) for user_doc in users]
+            
+            logger.debug(f"No premium users found for favorite station {station_id}")
+            return []
+        except Exception as e:
+            logger.error(f"Error finding users by favorite station {station_id}: {e}")
+            raise
+
 # Singleton instance
 user_repository = UserRepository() 

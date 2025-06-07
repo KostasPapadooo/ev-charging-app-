@@ -5,8 +5,10 @@ import asyncio
 import socketio
 from app.core.config import settings
 from app.repositories.station_repository import station_repository
+from app.repositories.user_repository import user_repository
 from app.repositories.event_repository import event_repository
 from app.services.tomtom_service import tomtom_service
+from app.services.notification_service import send_status_change_email
 from app.database.connection import connect_to_mongo
 
 logger = logging.getLogger(__name__)
@@ -127,6 +129,7 @@ def poll_station_availability_bulk(self):
 async def _async_bulk_poll_and_broadcast():
     await connect_to_mongo()
     await station_repository.initialize()
+    
     stations = await station_repository.get_all_stations()
     if not stations:
         logger.info("[Speed Layer] No stations found to check for availability.")
@@ -136,29 +139,67 @@ async def _async_bulk_poll_and_broadcast():
     # Χρησιμοποιούμε το κέντρο της Αθήνας και μεγάλο radius για παράδειγμα
     lat, lon, radius = 37.9838, 23.7275, 50000
     bulk_status = await tomtom_service.get_bulk_status_by_area(lat, lon, radius)
+
     changed_stations = []
     updated_count = 0
+    
+    # Use asyncio.gather to process stations concurrently
+    tasks = []
     for station in stations:
-        tomtom_id = station.get("tomtom_id")
-        if not tomtom_id:
-            continue
-        old_status = station.get("status", "UNKNOWN")
-        new_status = bulk_status.get(tomtom_id, old_status)
-        if old_status != new_status:
-            await station_repository.update_station_status(
-                tomtom_id,
-                new_status,
-                {"last_updated": datetime.utcnow()}
-            )
-            changed_stations.append({
-                "station_id": tomtom_id,
-                "old_status": old_status,
-                "new_status": new_status
-            })
+        tasks.append(process_station_status(station, bulk_status))
+
+    results = await asyncio.gather(*tasks)
+    
+    for result in results:
+        if result:
+            changed_stations.append(result['change_info'])
             updated_count += 1
+
     if changed_stations:
         logger.info(f"[Speed Layer] Broadcasting {len(changed_stations)} status changes via WebSocket")
-        # FIX: Use the async server instance and `await` the emit call.
         await sio_celery.emit('status_update', {"stations": changed_stations})
-    logger.info(f"[Speed Layer] Bulk poll finished. Updated: {updated_count}")
-    return {"status": "success", "updated": updated_count, "changed": len(changed_stations)} 
+        
+    logger.info(f"[Speed Layer] Bulk poll finished. Updated: {updated_count}, Notifications sent.")
+    return {"status": "success", "updated": updated_count, "changed": len(changed_stations)}
+
+async def process_station_status(station: dict, bulk_status: dict):
+    """
+    Processes a single station's status, updates DB, and sends notifications.
+    """
+    tomtom_id = station.get("tomtom_id")
+    if not tomtom_id:
+        return None
+
+    old_status = station.get("status", "UNKNOWN")
+    new_status = bulk_status.get(tomtom_id, old_status)
+
+    if old_status != new_status:
+        # 1. Update station status in the database
+        await station_repository.update_station_status(
+            tomtom_id,
+            new_status,
+            {"last_updated": datetime.utcnow()}
+        )
+
+        change_info = {
+            "station_id": tomtom_id,
+            "old_status": old_status,
+            "new_status": new_status
+        }
+        
+        # 2. Find users who have this station as a favorite
+        interested_users = await user_repository.find_premium_users_by_favorite_station(tomtom_id)
+        
+        # 3. Send email notifications to interested users
+        if interested_users:
+            station_name = station.get("name", "Unknown Station")
+            notification_tasks = []
+            for user in interested_users:
+                notification_tasks.append(
+                    send_status_change_email(user, station_name, old_status, new_status)
+                )
+            await asyncio.gather(*notification_tasks) # Send emails concurrently
+            
+        return {'change_info': change_info}
+        
+    return None 
