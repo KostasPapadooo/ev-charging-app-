@@ -4,6 +4,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import '../styles/StationsMap.css';
 import { useAuth } from '../contexts/AuthContext';
+import FavoriteStationHistory from './FavoriteStationHistory';
 
 // Fix for default markers
 delete L.Icon.Default.prototype._getIconUrl;
@@ -334,8 +335,8 @@ const StationsMap = ({
                           background: 'none', 
                           border: 'none', 
                           cursor: 'pointer', 
-                          marginLeft: '140px',
-                          fontSize: '20px',
+                          marginLeft: '160px',
+                          fontSize: '40px',
                           color: favoriteStations.includes(station.tomtom_id) ? '#ff69b4' : '#ccc'
                         }}
                       >
@@ -356,6 +357,7 @@ const StationsMap = ({
                     )}
                   </div>
 
+                  
                   <div className="connectors-info">
                     <h5>Connectors:</h5>
                     {station.connectors && station.connectors.length > 0 ? (
@@ -388,6 +390,16 @@ const StationsMap = ({
                     )}
                     
                   </div>
+
+                  {favoriteStations.includes(station.tomtom_id) && (
+                    <div className="favorite-station-history">
+                      <FavoriteStationHistory
+                        stationId={station.tomtom_id}
+                        stationName={station.name}
+                      />
+                    </div>
+                  )}
+
                 </div>
               </Popup>
             </Marker>

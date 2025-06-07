@@ -545,7 +545,13 @@
 }
 
 .filter-btn.unknown.active {
-  background: #ffc107;
+  background-color: #ffc107;
+  color: #fff;
   border-color: #ffc107;
-  color: #000;
+}
+
+.favorite-station-history {
+  margin-top: 15px;
+  padding-top: 10px;
+  border-top: 1px solid #eee;
 } 
