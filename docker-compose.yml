@@ -1,0 +1,132 @@
+version: '3.9'
+
+networks:
+  ev_charging_network:
+    driver: bridge
+
+services:
+  # --- Database Service (MongoDB) ---
+  mongo:
+    image: mongo:latest
+    container_name: ev-charging-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+      - ./dump:/dump
+    restart: always
+    networks:
+      - ev_charging_network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --- In-Memory Broker / Cache (Redis) ---
+  redis:
+    image: redis:alpine
+    container_name: ev-charging-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: always
+    networks:
+      - ev_charging_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --- Mail Catcher for Development (MailHog) ---
+  mailhog:
+    image: mailhog/mailhog
+    container_name: ev-charging-mailhog
+    ports:
+      - "1026:1025" # SMTP port
+      - "8026:8025" # Web UI
+    restart: always
+    networks:
+      - ev_charging_network
+
+  # --- Backend API Service (FastAPI + APScheduler) ---
+  backend:
+    container_name: ev-charging-backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: uvicorn app.main:socket_io_app --host 0.0.0.0 --port 8000
+    env_file: .env.docker
+    ports:
+      - "8000:8000"
+    networks:
+      - ev_charging_network
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # --- Background Task Scheduler (Celery Beat) ---
+  celery-beat:
+    container_name: ev-charging-celery-beat
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: celery -A app.core.celery_config.celery_app beat --loglevel=info
+    env_file: .env.docker
+    networks:
+      - ev_charging_network
+    restart: always
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+
+  # --- Background Task Processor (Celery Worker) ---
+  celery-worker:
+    container_name: ev-charging-celery-worker
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: celery -A app.core.celery_config.celery_app worker --loglevel=info -Q realtime_queue,batch_queue
+    env_file: .env.docker
+    networks:
+      - ev_charging_network
+    restart: always
+    depends_on:
+      backend:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # --- Frontend Service (React + Nginx) ---
+  frontend:
+    container_name: ev-charging-frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    networks:
+      - ev_charging_network
+    restart: always
+    depends_on:
+      - backend
+
+# --- Named Volumes for Data Persistence ---
+volumes:
+  mongo-data:
+    driver: local
+  redis-data:
+    driver: local 

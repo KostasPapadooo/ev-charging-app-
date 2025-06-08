@@ -73,10 +73,6 @@ async def lifespan(app: FastAPI):
         
         scheduler.start()
         
-        # Τρέχουμε μια φορά αμέσως για να δούμε αποτελέσματα
-        logger.info("🔄 Running initial Speed Layer update...")
-        poll_station_availability_bulk.delay()
-        
     except Exception as e:
         logger.error(f"❌ Failed to start scheduler: {e}")
     
@@ -101,11 +97,15 @@ fastapi_app = FastAPI(
     version="1.0.0"
 )
 
+# Parse the comma-separated string from settings into a list of origins
+origins_list = [origin.strip() for origin in settings.cors_origins.split(',')]
+logger.info(f"CORS origins configured: {origins_list}")
+
 # 2. Re-add the CORSMiddleware to the FastAPI app.
 # This will handle CORS for the REST API endpoints.
 fastapi_app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -117,7 +117,7 @@ mgr = socketio.AsyncRedisManager(settings.redis_url)
 sio = socketio.AsyncServer(
     async_mode="asgi",
     client_manager=mgr,
-    cors_allowed_origins=settings.cors_origins
+    cors_allowed_origins=origins_list
 )
 
 # 4. Wrap the FastAPI app with the Socket.IO app.

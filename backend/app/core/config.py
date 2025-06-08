@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     tomtom_base_url: str = "https://api.tomtom.com"
     
     # CORS settings
-    cors_origins: List[str] = ["http://localhost:3000", "http://127.0.0.1:8000"]
+    cors_origins: str = "http://localhost:3000,http://127.0.0.1:8000"
     
     # JWT settings
     secret_key: str
@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     smtp_port: Optional[int] = 587
     smtp_username: Optional[str] = None
     smtp_password: Optional[str] = None
+    smtp_from_email: Optional[str] = None
     
     # Redis settings (for caching or other purposes)
     redis_url: str
