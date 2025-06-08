@@ -1,5 +1,3 @@
-version: '3.9'
-
 networks:
   ev_charging_network:
     driver: bridge

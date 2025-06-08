@@ -49,12 +49,14 @@ function AppContent() {
   return (
     <>
       <Navigation />
-      <Routes>
-        <Route path="/register" element={<Register />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/" element={<HomePage />} />
-      </Routes>
+      <main className="main-content">
+        <Routes>
+          <Route path="/register" element={<Register />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/" element={<HomePage />} />
+        </Routes>
+      </main>
       {showFooter && <Footer />}
     </>
   );

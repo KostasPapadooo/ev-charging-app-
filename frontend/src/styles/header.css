@@ -4,6 +4,7 @@
     align-items: center;
     padding: 1rem;
     background-color: rgba(109, 23, 120, 0.9);
+    flex-shrink: 0;
 }
 
 .nav-link {
