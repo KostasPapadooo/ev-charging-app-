@@ -275,7 +275,7 @@ const StationsMap = ({
           center={[userLocation.lat, userLocation.lon]}
           zoom={currentRadius <= 500 ? 16 : currentRadius <= 1000 ? 15 : currentRadius <= 2000 ? 14 : currentRadius <= 5000 ? 13 : 12}
           className="stations-map"
-          style={{ height: '500px', width: '100%' }}
+          style={{ height: '700px', width: '100%' }}
         >
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'

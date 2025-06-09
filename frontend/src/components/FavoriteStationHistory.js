@@ -126,6 +126,7 @@ const FavoriteStationHistory = ({ stationId, stationName, hours = 24 }) => {
       },
       title: {
         display: true,
+        marginBottom: '10px',
         text: `${hours}h Status History`,
         font: {
           size: 14,
