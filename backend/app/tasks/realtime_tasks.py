@@ -181,16 +181,23 @@ async def process_station_status(station: dict, bulk_status: dict):
             {"last_updated": datetime.utcnow()}
         )
 
+        # 2. Add entry to historical availability
+        await station_repository.add_historical_availability(
+            tomtom_id,
+            new_status,
+            datetime.utcnow()
+        )
+
         change_info = {
             "station_id": tomtom_id,
             "old_status": old_status,
             "new_status": new_status
         }
         
-        # 2. Find users who have this station as a favorite
+        # 3. Find users who have this station as a favorite
         interested_users = await user_repository.find_premium_users_by_favorite_station(tomtom_id)
         
-        # 3. Send email notifications to interested users
+        # 4. Send email notifications to interested users
         if interested_users:
             station_name = station.get("name", "Unknown Station")
             notification_tasks = []

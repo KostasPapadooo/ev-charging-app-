@@ -441,5 +441,49 @@ class StationRepository:
             logger.error(f"Error getting all stations: {e}")
             return []
 
+    async def add_historical_availability(
+        self,
+        tomtom_id: str,
+        status: str,
+        timestamp: datetime
+    ):
+        """Adds a new historical availability record for a station."""
+        try:
+            historical_collection = self.db.historical_availability
+            await historical_collection.insert_one({
+                "tomtom_id": tomtom_id,
+                "status": status,
+                "timestamp": timestamp
+            })
+        except Exception as e:
+            logger.error(f"Error adding historical availability for {tomtom_id}: {e}")
+
+    async def get_favorite_station_history(
+        self,
+        station_id: str,
+        hours: int
+    ) -> List[Dict[str, Any]]:
+        """Retrieves the availability history for a specific station over a given period."""
+        try:
+            historical_collection = self.db.historical_availability
+            start_time = datetime.utcnow() - timedelta(hours=hours)
+            
+            history_cursor = historical_collection.find({
+                "tomtom_id": station_id,
+                "timestamp": {"$gte": start_time}
+            }).sort("timestamp", ASCENDING)
+            
+            history = await history_cursor.to_list(length=None)
+            
+            # Convert ObjectId and datetime to string for JSON serialization
+            for record in history:
+                record["_id"] = str(record["_id"])
+                record["timestamp"] = record["timestamp"].isoformat()
+            
+            return history
+        except Exception as e:
+            logger.error(f"Error getting history for station {station_id}: {e}")
+            return []
+
 # Create singleton instance
 station_repository = StationRepository() 

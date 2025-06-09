@@ -329,28 +329,16 @@ async def get_favorite_station_history(
     hours: int = Query(24, description="How many past hours to include in the history")
 ):
     """
-    Return the availability history for a given favorite station (for line chart analytics)
+    Get availability history for a favorite station.
+    Premium User Feature.
     """
     try:
-        from app.repositories.historical_repository import historical_repository
-        await historical_repository.initialize()
-        from datetime import datetime, timedelta
-        cutoff = datetime.utcnow() - timedelta(hours=hours)
-        # Find historical records for this station
-        cursor = historical_repository.collection.find({
-            "station_id": station_id,
-            "timestamp": {"$gte": cutoff}
-        }).sort("timestamp", 1)
-        history = []
-        async for doc in cursor:
-            history.append({
-                "timestamp": doc["timestamp"].isoformat(),
-                "status": doc.get("status", "UNKNOWN")
-            })
+        history = await station_repository.get_favorite_station_history(station_id, hours)
         return {
             "station_id": station_id,
+            "hours": hours,
             "history": history
         }
     except Exception as e:
-        logger.error(f"Error in get_favorite_station_history: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get favorite station history: {e}")
+        logger.error(f"Error fetching history for station {station_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch station history.")
