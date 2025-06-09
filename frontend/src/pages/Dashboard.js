@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import StationsMap from '../components/StationsMap';
 import AvailabilityRate from '../components/AvailabilityRate';
+import UserAnalytics from '../components/UserAnalytics';
 import '../styles/Dashboard.css';
 import { io } from 'socket.io-client';
 
@@ -332,6 +333,8 @@ const Dashboard = () => {
         currentRadius={currentRadius}
         onRadiusChange={handleRadiusChange} // Pass the handler
       />
+      
+      <UserAnalytics />
     </div>
   );
 };

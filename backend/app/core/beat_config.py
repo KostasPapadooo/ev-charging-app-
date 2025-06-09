@@ -30,7 +30,7 @@ beat_schedule = {
     **{
         f'update-stations-{location["name"].lower()}': {
             'task': 'app.tasks.batch_tasks.batch_update_stations',
-            'schedule': timedelta(hours=5),  # Run every 5 hours
+            'schedule': timedelta(hours=1),  # Run every 5 hours
             'args': (
                 location["latitude"],
                 location["longitude"],
